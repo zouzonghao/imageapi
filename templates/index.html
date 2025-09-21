@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dreamifly - AI 图像风格转换</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Dreamifly AI 图像风格转换</h1>
+        <p>上传一张图片，输入提示词，将其转换为动漫风格！</p>
+
+        <div class="main-content">
+            <div class="controls">
+                <h2>控制面板</h2>
+                <form id="generate-form">
+                    <div class="form-group">
+                        <label for="prompt">提示词 (Prompt)</label>
+                        <textarea id="prompt" name="prompt" rows="3" required>convert the style to anime</textarea>
+                        <button type="button" id="optimize-btn">优化提示词</button>
+                    </div>
+                    <div class="form-group" id="image-upload-group">
+                        <label for="image-upload">上传图片</label>
+                        <input type="file" id="image-upload" name="image" accept="image/*">
+                        <div id="image-preview-container">
+                            <img id="preview" src="#" alt="图片预览"/>
+                        </div>
+                        <button type="button" id="clear-image-btn" class="hidden">清除图片</button>
+                    </div>
+                    <div class="form-group">
+                        <label for="model">模型 (Model)</label>
+                        <select id="model" name="model">
+                            <option value="Flux-Kontext" selected>Flux-Kontext</option>
+                            <option value="Qwen-Image-Edit">Qwen-Image-Edit</option>
+                            <option value="Wai-SDXL-V150">Wai-SDXL-V150</option>
+                            <option value="Flux-Krea">Flux-Krea</option>
+                            <option value="HiDream-full-fp8">HiDream-full-fp8</option>
+                            <option value="Qwen-Image">Qwen-Image</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="steps">步数 (Steps)</label>
+                        <input type="range" id="steps" name="steps" min="10" max="50" value="25">
+                        <span id="steps-value">25</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="seed">种子 (Seed)</label>
+                        <input type="number" id="seed" name="seed" value="78897077">
+                    </div>
+                    <div class="form-group">
+                        <label for="width">宽度 (Width)</label>
+                        <input type="number" id="width" name="width" value="1920" min="64" max="1920">
+                    </div>
+                    <div class="form-group">
+                        <label for="height">高度 (Height)</label>
+                        <input type="number" id="height" name="height" value="1920" min="64" max="1920">
+                    </div>
+                    <button type="submit" id="submit-btn">生成图片</button>
+                </form>
+            </div>
+
+            <div class="result">
+                <h2>生成结果</h2>
+                <div id="result-container">
+                    <p>在这里查看您生成的图片。</p>
+                </div>
+                <div id="loading" class="hidden">
+                    <div class="spinner"></div>
+                    <p>正在生成中，请稍候...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="/static/js/script.js"></script>
+</body>
+</html>
