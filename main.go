@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/nfnt/resize"
+	_ "golang.org/x/image/webp"
 )
 
 // APIPayload matches the structure of the JSON data for the Dreamifly API.
@@ -85,40 +86,49 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error creating images directory: %v", err)
 	}
 
-	// Parse multipart form
+	// Parse multipart form, as we might have an image
 	if err := r.ParseMultipartForm(10 << 20); err != nil { // 10 MB
 		log.Printf("Error parsing multipart form: %v", err)
 		http.Error(w, "Could not parse multipart form", http.StatusBadRequest)
 		return
 	}
 
-	// Get file from form
+	var images []string
+	var logMessage string
+
+	// Get file from form, but don't error if it's missing
 	file, handler, err := r.FormFile("image")
-	if err != nil {
+	if err != nil && err != http.ErrMissingFile {
 		log.Printf("Error retrieving image from form: %v", err)
 		http.Error(w, "Could not retrieve image from form", http.StatusBadRequest)
 		return
 	}
-	defer file.Close()
 
-	// Read file content
-	imgBytes, err := io.ReadAll(file)
-	if err != nil {
-		log.Printf("Error reading image file: %v", err)
-		http.Error(w, "Could not read image file", http.StatusInternalServerError)
-		return
+	// If a file was uploaded, process it
+	if err == nil {
+		defer file.Close()
+
+		imgBytes, err := io.ReadAll(file)
+		if err != nil {
+			log.Printf("Error reading image file: %v", err)
+			http.Error(w, "Could not read image file", http.StatusInternalServerError)
+			return
+		}
+
+		processedImgBytes, err := processImage(imgBytes)
+		if err != nil {
+			log.Printf("Error processing image: %v", err)
+			http.Error(w, "Could not process image", http.StatusInternalServerError)
+			return
+		}
+
+		encodedImage := base64.StdEncoding.EncodeToString(processedImgBytes)
+		images = []string{encodedImage}
+
+		// Store info for the log message
+		logMessage = fmt.Sprintf("Image: %s (original: %d bytes, processed: %d bytes)",
+			handler.Filename, len(imgBytes), len(processedImgBytes))
 	}
-
-	// Process the image to resize if necessary
-	processedImgBytes, err := processImage(imgBytes)
-	if err != nil {
-		log.Printf("Error processing image: %v", err)
-		http.Error(w, "Could not process image", http.StatusInternalServerError)
-		return
-	}
-
-	// Encode image to base64
-	encodedImage := base64.StdEncoding.EncodeToString(processedImgBytes)
 
 	// Parse other form fields
 	prompt := r.FormValue("prompt")
@@ -146,8 +156,13 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 		height = 1920
 	}
 
-	log.Printf("Received generation request. Prompt: '%s', Model: '%s', Steps: %d, Seed: %d, Width: %d, Height: %d, Image: %s (original: %d bytes, processed: %d bytes)",
-		prompt, model, steps, seed, width, height, handler.Filename, len(imgBytes), len(processedImgBytes))
+	if logMessage != "" {
+		log.Printf("Received generation request. Prompt: '%s', Model: '%s', Steps: %d, Seed: %d, Width: %d, Height: %d, %s",
+			prompt, model, steps, seed, width, height, logMessage)
+	} else {
+		log.Printf("Received generation request. Prompt: '%s', Model: '%s', Steps: %d, Seed: %d, Width: %d, Height: %d",
+			prompt, model, steps, seed, width, height)
+	}
 
 	// Create payload for the external API
 	payload := APIPayload{
@@ -158,7 +173,7 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 		Seed:      seed,
 		BatchSize: 1,
 		Model:     model,
-		Images:    []string{encodedImage},
+		Images:    images,
 		Denoise:   0.7,
 	}
 
@@ -355,7 +370,8 @@ func handleOptimizePrompt(w http.ResponseWriter, r *http.Request) {
 	log.Println("Successfully forwarded API response to client.")
 }
 
-// processImage checks if an image is larger than 1024x1024 and resizes it if necessary.
+// processImage checks if an image is larger than 1920x1920 and resizes it if necessary.
+// It also converts PNG images to JPEG.
 func processImage(imgBytes []byte) ([]byte, error) {
 	img, format, err := image.Decode(bytes.NewReader(imgBytes))
 	if err != nil {
@@ -367,24 +383,34 @@ func processImage(imgBytes []byte) ([]byte, error) {
 	width := bounds.Dx()
 	height := bounds.Dy()
 
-	if width <= 1024 && height <= 1024 {
-		log.Println("Image is within size limits, no resizing needed.")
+	needsResize := width > 1920 || height > 1920
+	needsConversion := format == "png" || format == "webp"
+
+	if !needsResize && !needsConversion {
+		log.Println("Image is within size limits and does not need conversion, no processing needed.")
 		return imgBytes, nil
 	}
 
-	log.Printf("Image original size: %dx%d. Resizing to max 1024.", width, height)
-
-	// Use resize library to scale down the image, preserving aspect ratio.
-	m := resize.Thumbnail(1024, 1024, img, resize.Lanczos3)
+	var processedImage image.Image
+	if needsResize {
+		log.Printf("Image original size: %dx%d. Resizing to max 1920.", width, height)
+		processedImage = resize.Thumbnail(1920, 1920, img, resize.Lanczos3)
+	} else {
+		processedImage = img
+	}
 
 	var buf bytes.Buffer
 	// Re-encode the image to JPEG with a quality setting.
-	// 90 is a good balance between quality and file size.
-	if err := jpeg.Encode(&buf, m, &jpeg.Options{Quality: 90}); err != nil {
-		return nil, fmt.Errorf("failed to encode resized image to jpeg: %w", err)
+	if err := jpeg.Encode(&buf, processedImage, &jpeg.Options{Quality: 90}); err != nil {
+		return nil, fmt.Errorf("failed to encode image to jpeg: %w", err)
 	}
 
-	log.Printf("Image resized to: %dx%d", m.Bounds().Dx(), m.Bounds().Dy())
+	if needsResize {
+		log.Printf("Image resized to: %dx%d", processedImage.Bounds().Dx(), processedImage.Bounds().Dy())
+	}
+	if needsConversion {
+		log.Printf("Converted %s image to JPEG.", format)
+	}
 
 	return buf.Bytes(), nil
 }
