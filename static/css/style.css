@@ -128,6 +128,17 @@ button:hover {
     border: 1px solid #ddd;
 }
 
+#result-container .error {
+    color: #e74c3c; /* Red color for errors */
+    text-align: left; /* Align text to the left for readability */
+    padding: 15px;
+    border: 1px solid #f5c6cb;
+    background-color: #f8d7da;
+    border-radius: 4px;
+    word-wrap: break-word; /* Break long words */
+    white-space: pre-wrap; /* Respect newlines and wrap text */
+}
+
 #loading {
     text-align: center;
     margin-top: 20px;

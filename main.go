@@ -2,51 +2,57 @@ package main
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"image"
 	"image/jpeg"
-	_ "image/png" // Keep for decoding pngs
+	_ "image/jpeg" // Import for decoding JPEGs
+	_ "image/png"  // Import for decoding PNGs
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"dreamifly/imagehost"
+	"dreamifly/providers"
+
+	"github.com/chai2010/webp"
+	"github.com/joho/godotenv"
 	"github.com/nfnt/resize"
-	_ "golang.org/x/image/webp"
 )
 
-// APIPayload matches the structure of the JSON data for the Dreamifly API.
-type APIPayload struct {
-	Prompt    string   `json:"prompt"`
-	Width     int      `json:"width"`
-	Height    int      `json:"height"`
-	Steps     int      `json:"steps"`
-	Seed      int64    `json:"seed"`
-	BatchSize int      `json:"batch_size"`
-	Model     string   `json:"model"`
-	Images    []string `json:"images"`
-	Denoise   float64  `json:"denoise"`
-}
-
-// OptimizePromptPayload matches the structure for the prompt optimization API.
-type OptimizePromptPayload struct {
-	Prompt string `json:"prompt"`
-}
-
-// OptimizePromptResponse matches the structure of the successful response.
-type OptimizePromptResponse struct {
-	Success         bool   `json:"success"`
-	OriginalPrompt  string `json:"originalPrompt"`
-	OptimizedPrompt string `json:"optimizedPrompt"`
-}
+var (
+	providerRegistry map[string]providers.ImageProvider
+	imageHostClient  *imagehost.NodeImageClient
+)
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
+	// Load .env file
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("Warning: Could not load .env file")
+	}
+
+	// Initialize and register all providers
+	initializeProviders()
+
+	// Initialize the image host client
+	nodeImageAPIKey := imagehost.GetNodeImageAPIKey()
+	if nodeImageAPIKey == "" {
+		log.Println("Warning: NODEIMAGE_API_KEY is not set. Image hosting will be disabled.")
+	}
+	imageHostClient = imagehost.NewNodeImageClient(nodeImageAPIKey)
+
+	// Ensure images directory exists
+	if err := os.MkdirAll("images", 0755); err != nil {
+		log.Fatalf("Could not create images directory: %v", err)
+	}
+
 	// Serve static files
 	fs := http.FileServer(http.Dir("static"))
 	http.Handle("/static/", http.StripPrefix("/static/", fs))
@@ -56,7 +62,7 @@ func main() {
 
 	// Handle the API requests
 	http.HandleFunc("/api/generate", handleGenerate)
-	http.HandleFunc("/api/optimize-prompt", handleOptimizePrompt)
+	http.HandleFunc("/api/models", handleGetModels)
 
 	log.Println("Starting server on :8080...")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
@@ -64,352 +70,370 @@ func main() {
 	}
 }
 
-func serveIndex(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFiles("templates/index.html")
-	if err != nil {
-		http.Error(w, "Could not parse template", http.StatusInternalServerError)
-		return
+func initializeProviders() {
+	providerRegistry = make(map[string]providers.ImageProvider)
+
+	// Dreamifly (no API key needed)
+	dreamifly := providers.NewDreamiflyProvider()
+	providerRegistry[dreamifly.GetName()] = dreamifly
+
+	// Fal.ai
+	falAIAPIKey := providers.GetFalAIAPIKey()
+	if falAIAPIKey != "" {
+		falAI := providers.NewFalAIProvider(falAIAPIKey)
+		providerRegistry[falAI.GetName()] = falAI
+	} else {
+		log.Println("Warning: FAL_API_KEY not set, Fal.ai provider disabled.")
 	}
-	tmpl.Execute(w, nil)
+
+	// ModelScope
+	modelScopeAPIKey := providers.GetModelScopeAPIKey()
+	if modelScopeAPIKey != "" {
+		modelScope := providers.NewModelScopeProvider(modelScopeAPIKey)
+		providerRegistry[modelScope.GetName()] = modelScope
+	} else {
+		log.Println("Warning: MODELSCOPE_API_KEY not set, ModelScope provider disabled.")
+	}
+
+	// Pollinations.ai
+	pollinationsAPIKey := providers.GetPollinationsAIAPIKey()
+	// This provider can work without an API key, so we initialize it anyway.
+	// The provider itself will handle whether to send the auth header.
+	pollinations := providers.NewPollinationsAIProvider(pollinationsAPIKey)
+	providerRegistry[pollinations.GetName()] = pollinations
+	if pollinationsAPIKey == "" {
+		log.Println("Info: POLLINATIONS_AI_API_KEY not set. Pollinations.ai provider will work without authentication.")
+	}
+
+	log.Printf("Initialized %d providers", len(providerRegistry))
+}
+
+func serveIndex(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "templates/index.html")
+}
+
+// ModelInfo defines the structure for the model list API response.
+type ModelDetail struct {
+	Name            string   `json:"name"`
+	SupportedParams []string `json:"supported_params"`
+}
+
+type ProviderInfo struct {
+	Provider string        `json:"provider"`
+	Models   []ModelDetail `json:"models"`
+}
+
+func handleGetModels(w http.ResponseWriter, r *http.Request) {
+	// This list is hardcoded for now based on the API docs.
+	// We now include which parameters each model supports.
+	providers := []ProviderInfo{
+		{
+			Provider: "dreamifly",
+			Models: []ModelDetail{
+				{Name: "Flux-Kontext", SupportedParams: []string{"steps", "seed", "image"}},
+				{Name: "Qwen-Image-Edit", SupportedParams: []string{"steps", "seed", "image"}},
+				{Name: "Wai-SDXL-V150", SupportedParams: []string{"steps", "seed"}},
+				{Name: "Flux-Krea", SupportedParams: []string{"steps", "seed"}},
+				{Name: "HiDream-full-fp8", SupportedParams: []string{"steps", "seed"}},
+				{Name: "Qwen-Image", SupportedParams: []string{"steps", "seed"}},
+			},
+		},
+		{
+			Provider: "fal_ai",
+			Models:   []ModelDetail{{Name: "bytedance/seedream/v4/edit", SupportedParams: []string{"seed", "image"}}},
+		},
+		{
+			Provider: "modelscope",
+			Models: []ModelDetail{
+				{Name: "Qwen/Qwen-Image", SupportedParams: []string{"seed"}},
+				{Name: "Qwen/Qwen-Image-Edit", SupportedParams: []string{"seed", "image"}},
+			},
+		},
+		{
+			Provider: "pollinations_ai",
+			Models: []ModelDetail{
+				{Name: "flux", SupportedParams: []string{"seed"}},
+				{Name: "kontext", SupportedParams: []string{"seed", "image"}},
+			},
+		},
+	}
+
+	// Filter out providers that are not configured
+	var availableProviders []ProviderInfo
+	for _, p := range providers {
+		if _, ok := providerRegistry[p.Provider]; ok {
+			availableProviders = append(availableProviders, p)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(availableProviders)
 }
 
 func handleGenerate(w http.ResponseWriter, r *http.Request) {
-	log.Println("Received a new request for /api/generate")
 	if r.Method != http.MethodPost {
-		log.Printf("Invalid method: %s", r.Method)
 		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Ensure images directory exists
-	if err := os.MkdirAll("images", 0755); err != nil {
-		log.Printf("Error creating images directory: %v", err)
-	}
-
-	// Parse multipart form, as we might have an image
 	if err := r.ParseMultipartForm(10 << 20); err != nil { // 10 MB
-		log.Printf("Error parsing multipart form: %v", err)
 		http.Error(w, "Could not parse multipart form", http.StatusBadRequest)
 		return
 	}
 
-	var images []string
-	var logMessage string
+	// --- 1. Parse and Validate Input ---
+	fullModelName := r.FormValue("model")
+	parts := strings.SplitN(fullModelName, "/", 2)
+	if len(parts) != 2 {
+		http.Error(w, "Invalid model format. Expected 'provider/model_name'", http.StatusBadRequest)
+		return
+	}
+	providerName, modelName := parts[0], parts[1]
 
-	// Get file from form, but don't error if it's missing
+	provider, ok := providerRegistry[providerName]
+	if !ok {
+		http.Error(w, fmt.Sprintf("Provider '%s' not found or not configured", providerName), http.StatusBadRequest)
+		return
+	}
+
+	width, _ := strconv.Atoi(r.FormValue("width"))
+	height, _ := strconv.Atoi(r.FormValue("height"))
+	if width == 0 {
+		width = 1024
+	}
+	if height == 0 {
+		height = 1024
+	}
+
+	input := providers.GenerationInput{
+		Prompt: r.FormValue("prompt"),
+		Model:  modelName,
+		Width:  width,
+		Height: height,
+		Seed:   rand.Int63n(1000000), // Default seed, max 6 digits
+	}
+
+	// Parse optional parameters
+	if stepsStr := r.FormValue("steps"); stepsStr != "" {
+		if steps, err := strconv.Atoi(stepsStr); err == nil {
+			input.Steps = steps
+		}
+	}
+	if seedStr := r.FormValue("seed"); seedStr != "" {
+		if seed, err := strconv.ParseInt(seedStr, 10, 64); err == nil {
+			input.Seed = seed
+		}
+	}
+
+	// --- 2. Handle Image Input ---
+	var tempImageID string // To store the ID of a temporarily uploaded image
+	var providedImageBytes []byte
+	var providedImageFilename string = "image.png" // Default filename
+
+	// Try to get image from file upload first
 	file, handler, err := r.FormFile("image")
 	if err != nil && err != http.ErrMissingFile {
-		log.Printf("Error retrieving image from form: %v", err)
 		http.Error(w, "Could not retrieve image from form", http.StatusBadRequest)
 		return
 	}
 
-	// If a file was uploaded, process it
-	if err == nil {
+	if err == nil { // Image file was provided
 		defer file.Close()
-
-		imgBytes, err := io.ReadAll(file)
-		if err != nil {
-			log.Printf("Error reading image file: %v", err)
-			http.Error(w, "Could not read image file", http.StatusInternalServerError)
-			return
-		}
-
-		processedImgBytes, err := processImage(imgBytes)
-		if err != nil {
-			log.Printf("Error processing image: %v", err)
-			http.Error(w, "Could not process image", http.StatusInternalServerError)
-			return
-		}
-
-		encodedImage := base64.StdEncoding.EncodeToString(processedImgBytes)
-		images = []string{encodedImage}
-
-		// Store info for the log message
-		logMessage = fmt.Sprintf("Image: %s (original: %d bytes, processed: %d bytes)",
-			handler.Filename, len(imgBytes), len(processedImgBytes))
-	}
-
-	// Parse other form fields
-	prompt := r.FormValue("prompt")
-	model := r.FormValue("model")
-	steps, _ := strconv.Atoi(r.FormValue("steps"))
-	seed, _ := strconv.ParseInt(r.FormValue("seed"), 10, 64)
-	width, err := strconv.Atoi(r.FormValue("width"))
-	if err != nil || width == 0 {
-		width = 1920
-	}
-	height, err := strconv.Atoi(r.FormValue("height"))
-	if err != nil || height == 0 {
-		height = 1920
-	}
-
-	// Validate width and height
-	if width < 64 {
-		width = 64
-	} else if width > 1920 {
-		width = 1920
-	}
-	if height < 64 {
-		height = 64
-	} else if height > 1920 {
-		height = 1920
-	}
-
-	if logMessage != "" {
-		log.Printf("Received generation request. Prompt: '%s', Model: '%s', Steps: %d, Seed: %d, Width: %d, Height: %d, %s",
-			prompt, model, steps, seed, width, height, logMessage)
+		providedImageBytes, _ = io.ReadAll(file)
+		providedImageFilename = handler.Filename
 	} else {
-		log.Printf("Received generation request. Prompt: '%s', Model: '%s', Steps: %d, Seed: %d, Width: %d, Height: %d",
-			prompt, model, steps, seed, width, height)
-	}
-
-	// Create payload for the external API
-	payload := APIPayload{
-		Prompt:    prompt,
-		Width:     width,
-		Height:    height,
-		Steps:     steps,
-		Seed:      seed,
-		BatchSize: 1,
-		Model:     model,
-		Images:    images,
-		Denoise:   0.7,
-	}
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		log.Printf("Error marshalling API payload: %v", err)
-		http.Error(w, "Could not marshal API payload", http.StatusInternalServerError)
-		return
-	}
-	log.Println("Calling external API...")
-
-	// Call the external API
-	req, err := http.NewRequest("POST", "https://dreamifly.com/api/generate", bytes.NewBuffer(payloadBytes))
-	if err != nil {
-		log.Printf("Error creating request to external API: %v", err)
-		http.Error(w, "Could not create request to external API", http.StatusInternalServerError)
-		return
-	}
-
-	// Set headers as per the curl command
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
-	req.Header.Set("Referer", "https://dreamifly.com/zh")
-	req.Header.Set("sec-ch-ua-platform", `"macOS"`)
-	req.Header.Set("sec-ch-ua", `"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"`)
-	req.Header.Set("sec-ch-ua-mobile", "?0")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("Error calling external API: %v", err)
-		http.Error(w, "Failed to call external API", http.StatusServiceUnavailable)
-		return
-	}
-	defer resp.Body.Close()
-
-	log.Printf("External API responded with status code: %d, Content-Type: %s", resp.StatusCode, resp.Header.Get("Content-Type"))
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		log.Printf("External API returned non-200 status: %d, body: %s", resp.StatusCode, string(body))
-		http.Error(w, "External API returned an error", resp.StatusCode)
-		return
-	}
-
-	// Read the response body
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Error reading response body: %v", err)
-		http.Error(w, "Could not read image data", http.StatusInternalServerError)
-		return
-	}
-
-	// Try to parse response as JSON with base64 image data
-	type ImageResponse struct {
-		ImageURL string `json:"imageUrl"`
-	}
-	var imageResp ImageResponse
-	var imageData []byte
-	var contentType string
-
-	if err := json.Unmarshal(respBody, &imageResp); err == nil && imageResp.ImageURL != "" {
-		// It's a JSON response with an imageUrl, process it as a data URL
-		dataURL := imageResp.ImageURL
-		if strings.HasPrefix(dataURL, "data:image/") {
-			commaIndex := strings.Index(dataURL, ",")
-			if commaIndex != -1 {
-				// Extract mime type from prefix, e.g., "data:image/png;base64"
-				prefix := dataURL[:commaIndex]
-				parts := strings.Split(prefix, ";")
-				if len(parts) > 0 {
-					mimeParts := strings.Split(parts[0], ":")
-					if len(mimeParts) > 1 {
-						contentType = mimeParts[1]
-					}
-				}
-
-				// Fallback if content type parsing fails
-				if contentType == "" {
-					log.Println("Could not determine content type from data URL, defaulting to image/png")
-					contentType = "image/png"
-				}
-
-				base64Data := dataURL[commaIndex+1:]
-				imageData, err = base64.StdEncoding.DecodeString(base64Data)
-				if err != nil {
-					log.Printf("Error decoding base64 image data: %v", err)
-					http.Error(w, "Could not decode image data", http.StatusInternalServerError)
-					return
-				}
-			} else {
-				log.Printf("Invalid data URL format: missing comma")
-				http.Error(w, "Invalid image data format", http.StatusInternalServerError)
+		// If no file, check for an image URL
+		imageURL := r.FormValue("imageUrl")
+		if imageURL != "" {
+			log.Printf("Downloading image from provided URL: %s", imageURL)
+			// Use the new shared DownloadFile function
+			downloadedBytes, _, err := providers.DownloadFile(imageURL) // We don't need the content type here
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Failed to download image from URL: %v", err), http.StatusBadRequest)
 				return
 			}
-		} else {
-			log.Printf("Unexpected image URL format: does not start with 'data:image/'")
-			http.Error(w, "Invalid image data format", http.StatusInternalServerError)
+			providedImageBytes = downloadedBytes
+		}
+	}
+
+	if len(providedImageBytes) > 0 {
+		// --- 2a. Process Input Image (Resize and Compress) ---
+		inputSizeLimit, _ := strconv.Atoi(r.FormValue("input_size_limit"))
+		if inputSizeLimit == 0 {
+			inputSizeLimit = 1024 // Default value
+		}
+
+		processedBytes, err := processImage(providedImageBytes, uint(inputSizeLimit))
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to process image: %v", err), http.StatusInternalServerError)
 			return
 		}
+		providedImageBytes = processedBytes
+		providedImageFilename = strings.TrimSuffix(providedImageFilename, ".png") + ".jpg" // Change extension to jpg
+
+		input.ImageBytes = providedImageBytes
+
+		// If the provider requires a URL, upload the image to the host first.
+		if provider.RequiresImageURL() {
+			if imageHostClient == nil {
+				http.Error(w, "Image hosting is not configured, cannot process image for this provider", http.StatusInternalServerError)
+				return
+			}
+			log.Println("Provider requires URL, uploading temporary image...")
+			uploadResp, err := imageHostClient.UploadImage(providedImageBytes, providedImageFilename)
+			if err != nil {
+				errStr := fmt.Sprintf("Failed to upload temporary image: %v", err)
+				log.Println(errStr)
+				http.Error(w, errStr, http.StatusInternalServerError)
+				return
+			}
+			input.ImageURL = uploadResp.Links.Direct
+			tempImageID = uploadResp.ImageID
+			log.Printf("Temporary image uploaded: %s (ID: %s)", input.ImageURL, tempImageID)
+
+			// Defer the deletion of the temporary image.
+			// This ensures it runs even if the provider call fails.
+			defer func() {
+				if tempImageID != "" {
+					log.Printf("Deleting temporary image with ID: %s", tempImageID)
+					if err := imageHostClient.DeleteImage(tempImageID); err != nil {
+						log.Printf("Warning: failed to delete temporary image %s: %v", tempImageID, err)
+					}
+				}
+			}()
+		}
+	}
+
+	// --- 3. Call the Provider ---
+	log.Printf("Calling provider '%s' with model '%s'", providerName, modelName)
+	output, err := provider.Generate(input)
+	if err != nil {
+		errStr := fmt.Sprintf("Error from provider '%s': %v", providerName, err)
+		log.Println(errStr)
+		http.Error(w, errStr, http.StatusInternalServerError)
+		return // The deferred deletion will still run
+	}
+
+	// --- 4. Handle Temporary Image Deletion ---
+	// The deletion is now handled by the deferred function call.
+	// The explicit deletion block is no longer needed here.
+
+	// --- 5. Process and Upload Final Image ---
+	if imageHostClient == nil {
+		http.Error(w, "Image hosting is not configured, cannot return final image URL", http.StatusInternalServerError)
+		return
+	}
+
+	finalImageBytes := output.ImageBytes
+	// The logic for downloading from a provider's URL is now removed,
+	// as all providers are expected to return image bytes directly.
+
+	if len(finalImageBytes) == 0 {
+		http.Error(w, "Provider did not return any image data", http.StatusInternalServerError)
+		return
+	}
+
+	// Convert the final image to WebP before uploading.
+	webpBytes, err := convertToWebP(finalImageBytes)
+	if err != nil {
+		// If conversion fails, log the error but proceed with the original image.
+		log.Printf("Warning: failed to convert image to WebP: %v. Uploading original format.", err)
+		webpBytes = finalImageBytes // Fallback to original bytes
 	} else {
-		// If not JSON or doesn't contain imageUrl, treat the raw response as image data
-		imageData = respBody
-		contentType = http.DetectContentType(imageData)
+		log.Printf("Successfully converted final image to WebP. Original size: %d, WebP size: %d", len(finalImageBytes), len(webpBytes))
 	}
 
-	// Generate filename with timestamp
-	timestamp := time.Now().Format("20060102150405000")
-	filename := fmt.Sprintf("images/%s.png", timestamp)
+	// Always use .webp extension for consistency.
+	localFilename := fmt.Sprintf("images/%d.webp", time.Now().UnixNano())
 
-	// Save image to file
-	if err := os.WriteFile(filename, imageData, 0644); err != nil {
-		log.Printf("Error saving image to file: %v", err)
+	// Save the (potentially converted) image locally.
+	if err := os.WriteFile(localFilename, webpBytes, 0644); err != nil {
+		log.Printf("Warning: failed to save final image locally to %s: %v", localFilename, err)
 	} else {
-		log.Printf("Image saved to %s", filename)
+		log.Printf("Successfully saved final image to %s", localFilename)
 	}
 
-	// Stream the image data back to the client
-	w.Header().Set("Content-Type", contentType)
-	w.Write(imageData)
-	log.Println("Successfully streamed image response to client.")
-}
-
-func handleOptimizePrompt(w http.ResponseWriter, r *http.Request) {
-	log.Println("Received a new request for /api/optimize-prompt")
-	if r.Method != http.MethodPost {
-		log.Printf("Invalid method: %s", r.Method)
-		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Decode the incoming JSON payload
-	var payload OptimizePromptPayload
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		log.Printf("Error decoding request body: %v", err)
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	log.Printf("Optimizing prompt: '%s'", payload.Prompt)
-
-	// Create payload for the external API
-	apiPayloadBytes, err := json.Marshal(payload)
+	log.Println("Uploading final image to image host...")
+	finalUpload, err := imageHostClient.UploadImage(webpBytes, localFilename)
 	if err != nil {
-		log.Printf("Error marshalling API payload: %v", err)
-		http.Error(w, "Could not marshal API payload", http.StatusInternalServerError)
+		errStr := fmt.Sprintf("Failed to upload final image: %v", err)
+		log.Println(errStr)
+		http.Error(w, errStr, http.StatusInternalServerError)
 		return
 	}
 
-	// Call the external API
-	req, err := http.NewRequest("POST", "https://dreamifly.com/api/optimize-prompt", bytes.NewBuffer(apiPayloadBytes))
-	if err != nil {
-		log.Printf("Error creating request to external API: %v", err)
-		http.Error(w, "Could not create request to external API", http.StatusInternalServerError)
-		return
-	}
-
-	// Set headers to mimic the provided curl command
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "*/*")
-	req.Header.Set("Origin", "https://dreamifly.com")
-	req.Header.Set("Referer", "https://dreamifly.com/zh")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("Error calling external API: %v", err)
-		http.Error(w, "Failed to call external API", http.StatusServiceUnavailable)
-		return
-	}
-	defer resp.Body.Close()
-
-	log.Printf("External API responded with status code: %d", resp.StatusCode)
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		log.Printf("External API returned non-200 status: %d, body: %s", resp.StatusCode, string(body))
-		http.Error(w, "External API returned an error", resp.StatusCode)
-		return
-	}
-
-	// Read the response body
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Error reading response body: %v", err)
-		http.Error(w, "Could not read response from external API", http.StatusInternalServerError)
-		return
-	}
-
-	// Forward the response to the client
+	// --- 6. Return Final URL to Client ---
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(respBody)
-	log.Println("Successfully forwarded API response to client.")
+	json.NewEncoder(w).Encode(map[string]string{
+		"imageUrl": finalUpload.Links.Direct,
+	})
+	log.Printf("Successfully returned final image URL to client: %s", finalUpload.Links.Direct)
 }
 
-// processImage checks if an image is larger than 1920x1920 and resizes it if necessary.
-// It also converts PNG images to JPEG.
-func processImage(imgBytes []byte) ([]byte, error) {
-	img, format, err := image.Decode(bytes.NewReader(imgBytes))
+// processImage resizes and compresses an image.
+func processImage(imageBytes []byte, sizeLimit uint) ([]byte, error) {
+	img, _, err := image.Decode(bytes.NewReader(imageBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode image: %w", err)
 	}
-	log.Printf("Decoded image format: %s", format)
 
 	bounds := img.Bounds()
-	width := bounds.Dx()
-	height := bounds.Dy()
+	width, height := bounds.Dx(), bounds.Dy()
 
-	needsResize := width > 1920 || height > 1920
-	needsConversion := format == "png" || format == "webp"
-
-	if !needsResize && !needsConversion {
-		log.Println("Image is within size limits and does not need conversion, no processing needed.")
-		return imgBytes, nil
+	// Resize if either dimension exceeds the limit
+	if uint(width) > sizeLimit || uint(height) > sizeLimit {
+		log.Printf("Resizing image from %dx%d to fit within %dpx", width, height, sizeLimit)
+		if width > height {
+			img = resize.Resize(sizeLimit, 0, img, resize.Lanczos3)
+		} else {
+			img = resize.Resize(0, sizeLimit, img, resize.Lanczos3)
+		}
 	}
 
-	var processedImage image.Image
-	if needsResize {
-		log.Printf("Image original size: %dx%d. Resizing to max 1920.", width, height)
-		processedImage = resize.Thumbnail(1920, 1920, img, resize.Lanczos3)
-	} else {
-		processedImage = img
+	// Compress to JPEG
+	buf := new(bytes.Buffer)
+	// Use a quality of 85 for a good balance between size and quality.
+	if err := jpeg.Encode(buf, img, &jpeg.Options{Quality: 85}); err != nil {
+		return nil, fmt.Errorf("failed to encode image to JPEG: %w", err)
 	}
 
-	var buf bytes.Buffer
-	// Re-encode the image to JPEG with a quality setting.
-	if err := jpeg.Encode(&buf, processedImage, &jpeg.Options{Quality: 90}); err != nil {
-		return nil, fmt.Errorf("failed to encode image to jpeg: %w", err)
+	log.Printf("Image processed. Original size: %d bytes, New size: %d bytes", len(imageBytes), buf.Len())
+
+	return buf.Bytes(), nil
+}
+
+// mimeTypeToExt maps a MIME type to a file extension.
+func mimeTypeToExt(mimeType string) string {
+	switch mimeType {
+	case "image/jpeg":
+		return ".jpg"
+	case "image/png":
+		return ".png"
+	case "image/gif":
+		return ".gif"
+	case "image/webp":
+		return ".webp"
+	default:
+		// Default to .png if the type is unknown or not an image.
+		// We could also check for "image/" prefix.
+		log.Printf("Unknown MIME type '%s', defaulting to .png", mimeType)
+		return ".png"
+	}
+}
+
+// convertToWebP takes image bytes, decodes them, and re-encodes as WebP.
+func convertToWebP(imageBytes []byte) ([]byte, error) {
+	// Decode the image. image.Decode automatically detects the format.
+	img, _, err := image.Decode(bytes.NewReader(imageBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image for WebP conversion: %w", err)
 	}
 
-	if needsResize {
-		log.Printf("Image resized to: %dx%d", processedImage.Bounds().Dx(), processedImage.Bounds().Dy())
-	}
-	if needsConversion {
-		log.Printf("Converted %s image to JPEG.", format)
+	// Encode the image to WebP.
+	buf := new(bytes.Buffer)
+	// The second parameter to Encode is the quality, from 0 to 100. 80 is a good default.
+	if err := webp.Encode(buf, img, &webp.Options{Quality: 80}); err != nil {
+		return nil, fmt.Errorf("failed to encode image to WebP: %w", err)
 	}
 
 	return buf.Bytes(), nil

@@ -21,33 +21,39 @@
                         <button type="button" id="optimize-btn">优化提示词</button>
                     </div>
                     <div class="form-group" id="image-upload-group">
-                        <label for="image-upload">上传图片</label>
-                        <input type="file" id="image-upload" name="image" accept="image/jpeg, image/png, image/webp">
-                        <div id="image-preview-container">
-                            <img id="preview" src="#" alt="图片预览"/>
-                        </div>
-                        <button type="button" id="clear-image-btn" class="hidden">清除图片</button>
-                    </div>
-                    <div class="form-group">
-                        <label for="model">模型 (Model)</label>
-                        <select id="model" name="model">
-                            <option value="Flux-Kontext" selected>Flux-Kontext</option>
-                            <option value="Qwen-Image-Edit">Qwen-Image-Edit</option>
-                            <option value="Wai-SDXL-V150">Wai-SDXL-V150</option>
-                            <option value="Flux-Krea">Flux-Krea</option>
-                            <option value="HiDream-full-fp8">HiDream-full-fp8</option>
-                            <option value="Qwen-Image">Qwen-Image</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="steps">步数 (Steps)</label>
-                        <input type="range" id="steps" name="steps" min="10" max="50" value="25">
-                        <span id="steps-value">25</span>
-                    </div>
-                    <div class="form-group">
-                        <label for="seed">种子 (Seed)</label>
-                        <input type="number" id="seed" name="seed" value="78897077">
-                    </div>
+                                       <label for="image-upload">上传图片 (Upload Image)</label>
+                                       <input type="file" id="image-upload" name="image" accept="image/jpeg, image/png, image/webp">
+                                       <div id="image-preview-container">
+                                           <img id="preview" src="#" alt="图片预览"/>
+                                       </div>
+                                       <button type="button" id="clear-image-btn" class="hidden">清除图片</button>
+                                   </div>
+                                   <div class="form-group">
+                                       <label for="imageUrl">或输入图片URL (Or Enter Image URL)</label>
+                                       <input type="text" id="imageUrl" name="imageUrl" placeholder="https://example.com/image.png">
+                                   </div>
+                                   <div class="form-group">
+                                       <label for="model">模型 (Model)</label>
+                                       <select id="model" name="model">
+                                           <!-- Models will be loaded dynamically -->
+                                       </select>
+                                   </div>
+                                   <div class="form-group">
+                                       <label for="input_size_limit">输入图片尺寸限制 (Input Image Size Limit)</label>
+                                       <select id="input_size_limit" name="input_size_limit">
+                                           <option value="1024">1024px</option>
+                                           <option value="2048">2048px</option>
+                                       </select>
+                                   </div>
+                    <div class="form-group dynamic-param hidden" data-param="steps">
+                                       <label for="steps">步数 (Steps)</label>
+                                       <input type="range" id="steps" name="steps" min="10" max="50" value="25">
+                                       <span id="steps-value">25</span>
+                                   </div>
+                                   <div class="form-group dynamic-param hidden" data-param="seed">
+                                       <label for="seed">种子 (Seed)</label>
+                                       <input type="number" id="seed" name="seed" value="">
+                                   </div>
                     <div class="form-group">
                         <label for="width">宽度 (Width)</label>
                         <input type="number" id="width" name="width" value="1920" min="64" max="1920">
