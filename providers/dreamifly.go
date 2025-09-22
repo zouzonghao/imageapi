@@ -22,12 +22,12 @@ type DreamiflyProvider struct {
 }
 
 var dreamiflyModels = []ModelCapabilities{
-	{Name: "Flux-Kontext", SupportedParams: []string{"steps", "seed", "image"}, MaxWidth: 1920, MaxHeight: 1920},
-	{Name: "Qwen-Image-Edit", SupportedParams: []string{"steps", "seed", "image"}, MaxWidth: 1920, MaxHeight: 1920},
-	{Name: "Wai-SDXL-V150", SupportedParams: []string{"steps", "seed"}, MaxWidth: 1920, MaxHeight: 1920},
-	{Name: "Flux-Krea", SupportedParams: []string{"steps", "seed"}, MaxWidth: 1920, MaxHeight: 1920},
-	{Name: "HiDream-full-fp8", SupportedParams: []string{"steps", "seed"}, MaxWidth: 1920, MaxHeight: 1920},
-	{Name: "Qwen-Image", SupportedParams: []string{"steps", "seed"}, MaxWidth: 1920, MaxHeight: 1920},
+	{Name: "Flux-Kontext", SupportedParams: []string{"steps", "seed", "image"}, MaxWidth: 1920, MaxHeight: 1920, MinSteps: 5, MaxSteps: 40, DefaultSteps: 25},
+	{Name: "Qwen-Image-Edit", SupportedParams: []string{"steps", "seed", "image"}, MaxWidth: 1920, MaxHeight: 1920, MinSteps: 5, MaxSteps: 40, DefaultSteps: 25},
+	{Name: "Wai-SDXL-V150", SupportedParams: []string{"steps", "seed"}, MaxWidth: 1920, MaxHeight: 1920, MinSteps: 5, MaxSteps: 40, DefaultSteps: 25},
+	{Name: "Flux-Krea", SupportedParams: []string{"steps", "seed"}, MaxWidth: 1920, MaxHeight: 1920, MinSteps: 5, MaxSteps: 40, DefaultSteps: 25},
+	{Name: "HiDream-full-fp8", SupportedParams: []string{"steps", "seed"}, MaxWidth: 1920, MaxHeight: 1920, MinSteps: 5, MaxSteps: 40, DefaultSteps: 25},
+	{Name: "Qwen-Image", SupportedParams: []string{"steps", "seed"}, MaxWidth: 1920, MaxHeight: 1920, MinSteps: 5, MaxSteps: 40, DefaultSteps: 25},
 }
 
 // NewDreamiflyProvider creates a new Dreamifly client.

@@ -121,6 +121,14 @@ func initializeProviders() {
 		log.Println("Info: POLLINATIONS_AI_API_KEY not set. Pollinations.ai provider will work without authentication.")
 	}
 
+	// Cloudflare
+	cloudflare := providers.NewCloudflareProvider()
+	if cloudflare != nil {
+		providerRegistry[cloudflare.GetName()] = cloudflare
+	} else {
+		log.Println("Warning: CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_API_TOKEN not set, Cloudflare provider disabled.")
+	}
+
 	log.Printf("Initialized %d providers", len(providerRegistry))
 }
 
@@ -190,6 +198,9 @@ type ModelDetail struct {
 	SupportedParams []string `json:"supported_params"`
 	MaxWidth        int      `json:"max_width"`
 	MaxHeight       int      `json:"max_height"`
+	MinSteps        int      `json:"min_steps,omitempty"`
+	MaxSteps        int      `json:"max_steps,omitempty"`
+	DefaultSteps    int      `json:"default_steps,omitempty"`
 }
 
 type ProviderInfo struct {
@@ -211,6 +222,9 @@ func handleGetModels(w http.ResponseWriter, r *http.Request) {
 				SupportedParams: m.SupportedParams,
 				MaxWidth:        m.MaxWidth,
 				MaxHeight:       m.MaxHeight,
+				MinSteps:        m.MinSteps,
+				MaxSteps:        m.MaxSteps,
+				DefaultSteps:    m.DefaultSteps,
 			}
 		}
 

@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const dynamicParams = document.querySelectorAll('.dynamic-param');
     const optimizeBtn = document.getElementById('optimize-btn');
     const promptTextarea = document.getElementById('prompt');
+    const inputSizeLimitGroup = document.getElementById('input-size-limit-group');
    
     let modelsData = []; // To store the data from /api/models
    
@@ -80,10 +81,20 @@ document.addEventListener('DOMContentLoaded', function () {
         if (supportedParams.includes('image')) {
         	imageUploadGroup.classList.remove('hidden');
         	imageUrlGroup.classList.remove('hidden');
+        	inputSizeLimitGroup.classList.remove('hidden');
         } else {
-            imageUploadGroup.classList.add('hidden');
-            imageUrlGroup.classList.add('hidden');
-            clearImage(); // Clear any selected image if the model doesn't support it
+        	   imageUploadGroup.classList.add('hidden');
+        	   imageUrlGroup.classList.add('hidden');
+        	   inputSizeLimitGroup.classList.add('hidden');
+        	   clearImage(); // Clear any selected image if the model doesn't support it
+        }
+
+        // Update steps slider constraints
+        if (modelInfo.min_steps && modelInfo.max_steps && modelInfo.default_steps) {
+            stepsInput.min = modelInfo.min_steps;
+            stepsInput.max = modelInfo.max_steps;
+            stepsInput.value = modelInfo.default_steps;
+            stepsValue.textContent = modelInfo.default_steps;
         }
     });
 

@@ -6,6 +6,9 @@ type ModelCapabilities struct {
 	SupportedParams []string `json:"supported_params"`
 	MaxWidth        int      `json:"max_width"`
 	MaxHeight       int      `json:"max_height"`
+	MinSteps        int      `json:"min_steps,omitempty"`
+	MaxSteps        int      `json:"max_steps,omitempty"`
+	DefaultSteps    int      `json:"default_steps,omitempty"`
 }
 
 // GenerationInput defines the standardized input for all AI providers.
