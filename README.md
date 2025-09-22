@@ -56,9 +56,9 @@
 5.  **访问应用**
     服务器启动后，您会看到一条日志信息：
     ```
-    Starting server on :8080...
+    Starting server on :37375...
     ```
-    此时，打开您的浏览器并访问 `http://localhost:8080`。如果设置了 `WEB_PASSWORD`，您将被引导至登录页面。
+    此时，打开您的浏览器并访问 `http://localhost:37375`。如果设置了 `WEB_PASSWORD`，您将被引导至登录页面。
 
 ## 外部 API 使用说明
 
@@ -136,7 +136,7 @@
 **cURL 示例**:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/generate \
+curl -X POST http://localhost:37375/api/v1/generate \
 -H "Authorization: Bearer your_secret_api_key" \
 -H "Content-Type: application/json" \
 -d '{
@@ -168,7 +168,7 @@ curl -X POST http://localhost:8080/api/v1/generate \
 **cURL 示例**:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/generate \
+curl -X POST http://localhost:37375/api/v1/generate \
 -H "Authorization: Bearer your_secret_api_key" \
 -H "Content-Type: application/json" \
 -d '{

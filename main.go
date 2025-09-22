@@ -78,8 +78,8 @@ func main() {
 	apiV1.HandleFunc("/api/v1/generate", handleAPIGenerate)
 	http.Handle("/api/v1/", middleware.APIKeyAuthMiddleware(apiV1))
 
-	log.Println("Starting server on :8080...")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	log.Println("Starting server on :37375...")
+	if err := http.ListenAndServe(":37375", nil); err != nil {
 		log.Fatalf("Could not start server: %s\n", err)
 	}
 }
