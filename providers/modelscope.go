@@ -14,7 +14,7 @@ import (
 const (
 	modelScopeAPIURL   = "https://api-inference.modelscope.cn/v1/images/generations"
 	modelScopeTaskURL  = "https://api-inference.modelscope.cn/v1/tasks/"
-	maxPollingAttempts = 60 // 5 minutes timeout (60 attempts * 5 seconds)
+	maxPollingAttempts = 90 // 5 minutes timeout (60 attempts * 5 seconds)
 	pollingInterval    = 5 * time.Second
 )
 

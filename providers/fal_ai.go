@@ -65,15 +65,42 @@ type falAIAPIResponse struct {
 // Note: Fal.ai requires an image URL, so the controller logic
 // will need to ensure input.ImageURL is populated.
 func (p *FalAIProvider) Generate(input GenerationInput) (*GenerationOutput, error) {
-	// This provider requires an image URL. The main handler should have uploaded
-	// the image if bytes were provided.
-	if input.ImageURL == "" {
-		return nil, fmt.Errorf("Fal_ai: image URL is required")
+	// Dynamically check if the selected model requires an image.
+	var modelInfo ModelCapabilities
+	found := false
+	for _, m := range falAIModels {
+		if m.Name == input.Model {
+			modelInfo = m
+			found = true
+			break
+		}
+	}
+
+	// This should ideally not be reached if validation happens upstream.
+	if !found {
+		return nil, fmt.Errorf("Fal_ai: model '%s' not found in provider capabilities", input.Model)
+	}
+
+	modelNeedsImage := false
+	for _, param := range modelInfo.SupportedParams {
+		if param == "image" {
+			modelNeedsImage = true
+			break
+		}
+	}
+
+	if input.ImageURL == "" && modelNeedsImage {
+		return nil, fmt.Errorf("Fal_ai: image URL is required for model '%s'", input.Model)
+	}
+
+	imageURLs := make([]string, 0)
+	if input.ImageURL != "" {
+		imageURLs = append(imageURLs, input.ImageURL)
 	}
 
 	payload := falAIAPIPayload{
 		Prompt:              input.Prompt,
-		ImageURLs:           []string{input.ImageURL},
+		ImageURLs:           imageURLs,
 		EnableSafetyChecker: false,
 	}
 	payload.ImageSize.Width = input.Width

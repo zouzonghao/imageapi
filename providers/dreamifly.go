@@ -61,8 +61,8 @@ type dreamiflyAPIPayload struct {
 	Seed      int64    `json:"seed"`
 	BatchSize int      `json:"batch_size"`
 	Model     string   `json:"model"`
-	Images    []string `json:"images"`
-	Denoise   float64  `json:"denoise"` // Defaulting to 0.7
+	Images    []string `json:"images,omitempty"`
+	Denoise   float64  `json:"denoise,omitempty"`
 }
 
 // ImageResponse matches the JSON response with base64 image data.
@@ -126,7 +126,7 @@ func (p *DreamiflyProvider) OptimizePrompt(prompt string) (string, error) {
 
 // Generate sends a request to the Dreamifly API.
 func (p *DreamiflyProvider) Generate(input GenerationInput) (*GenerationOutput, error) {
-	var images []string
+	images := make([]string, 0)
 	if len(input.ImageBytes) > 0 {
 		encodedImage := base64.StdEncoding.EncodeToString(input.ImageBytes)
 		images = []string{encodedImage}
@@ -146,7 +146,11 @@ func (p *DreamiflyProvider) Generate(input GenerationInput) (*GenerationOutput, 
 		BatchSize: 1,
 		Model:     input.Model,
 		Images:    images,
-		Denoise:   0.7,
+	}
+
+	// Denoise is only applicable for image-to-image operations.
+	if len(images) > 0 {
+		payload.Denoise = 0.7
 	}
 
 	// Create a copy of the payload for logging, but without the image data.

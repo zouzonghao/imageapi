@@ -359,6 +359,14 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// --- 3. Call the Provider ---
+	// Specific model validation: Check if models that require an image have one.
+	if (fullModelName == "Dreamifly/Flux-Kontext" || fullModelName == "Dreamifly/Qwen-Image-Edit") && len(input.ImageBytes) == 0 {
+		errStr := fmt.Sprintf("Model '%s' requires an image", fullModelName)
+		log.Println(errStr)
+		http.Error(w, errStr, http.StatusBadRequest)
+		return
+	}
+
 	log.Printf("Calling provider '%s' with model '%s'", providerName, modelName)
 	output, err := provider.Generate(input)
 	if err != nil {
@@ -689,6 +697,15 @@ func handleAPIGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 5. Call the Provider
+	// Specific model validation: Check if models that require an image have one.
+	if (apiReq.Model == "Dreamifly/Flux-Kontext" || apiReq.Model == "Dreamifly/Qwen-Image-Edit") && apiReq.ImageURL == "" {
+		errStr := fmt.Sprintf("Model '%s' requires an 'image_url'", apiReq.Model)
+		log.Printf("API: Validation Error: %s", errStr)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(APIGenerateResponse{Status: "error", Error: errStr})
+		return
+	}
+
 	log.Printf("API: Calling provider '%s' with model '%s'", providerName, modelName)
 	output, err := provider.Generate(input)
 	if err != nil {
