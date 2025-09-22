@@ -3,8 +3,9 @@ package middleware
 import (
 	"log"
 	"net/http"
-	"os"
 	"strings"
+
+	"imageapi/config"
 
 	"github.com/gorilla/sessions"
 )
@@ -24,10 +25,9 @@ var Store *sessions.CookieStore
 func InitSessionStore() {
 	// The session key should be a long, random string.
 	// It's read from an environment variable for security.
-	sessionKey := os.Getenv("SESSION_SECRET")
-	if sessionKey == "" {
-		log.Println("Warning: SESSION_SECRET is not set. Using a default, insecure key. Please set a strong secret in your .env file for production.")
-		sessionKey = "default-insecure-secret-key-change-me"
+	sessionKey := config.AppConfig.Settings.SessionSecret
+	if sessionKey == "a_very_long_and_random_secret_string" {
+		log.Println("Warning: SESSION_SECRET is not set or is the default. Using a default, insecure key. Please set a strong secret in your .env file for production.")
 	}
 	Store = sessions.NewCookieStore([]byte(sessionKey))
 
@@ -43,7 +43,7 @@ func InitSessionStore() {
 // WebAuthMiddleware protects web routes that require authentication.
 func WebAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		webPassword := os.Getenv("WEB_PASSWORD")
+		webPassword := config.AppConfig.Settings.WebPassword
 		// If no password is set, authentication is disabled.
 		if webPassword == "" {
 			next.ServeHTTP(w, r)
@@ -73,7 +73,7 @@ func WebAuthMiddleware(next http.Handler) http.Handler {
 // APIKeyAuthMiddleware protects API routes with an API key.
 func APIKeyAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		apiKey := os.Getenv("IMAGEAPI_API_KEY")
+		apiKey := config.AppConfig.APIKeys.ImageAPI
 		if apiKey == "" {
 			log.Println("Error: IMAGEAPI_API_KEY is not set. API is disabled.")
 			http.Error(w, "API is not configured on the server.", http.StatusServiceUnavailable)

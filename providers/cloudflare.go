@@ -8,11 +8,12 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
+
+	"imageapi/config"
 )
 
 const (
-	cloudflareAPIURLFormat = "https://api.cloudflare.com/client/v4/accounts/%s/ai/run/@cf/black-forest-labs/flux-1-schnell"
+	cloudflareAPIURLFormat = "https://api.cloudflare.com/client/v4/accounts/%s/ai/run/%s"
 )
 
 // CloudflareProvider implements the ImageProvider for Cloudflare.
@@ -23,13 +24,14 @@ type CloudflareProvider struct {
 }
 
 var cloudflareModels = []ModelCapabilities{
-	{Name: "flux-1-schnell", SupportedParams: []string{"steps"}, MaxWidth: 1024, MaxHeight: 1024, MinSteps: 4, MaxSteps: 8, DefaultSteps: 8},
+	{Name: "@cf/black-forest-labs/flux-1-schnell", SupportedParams: []string{"steps"}, MaxWidth: 1024, MaxHeight: 1024, MinSteps: 4, MaxSteps: 8, DefaultSteps: 8},
+	{Name: "@cf/stabilityai/stable-diffusion-xl-base-1.0", SupportedParams: []string{"width", "height"}, MaxWidth: 1024, MaxHeight: 1024},
 }
 
 // NewCloudflareProvider creates a new Cloudflare client if credentials are provided.
 func NewCloudflareProvider() *CloudflareProvider {
-	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
-	apiToken := os.Getenv("CLOUDFLARE_API_TOKEN")
+	accountID := config.AppConfig.CloudflareCredentials.AccountID
+	apiToken := config.AppConfig.CloudflareCredentials.APIToken
 
 	if accountID == "" || apiToken == "" {
 		return nil // Return nil if credentials are not set
@@ -61,6 +63,8 @@ func (p *CloudflareProvider) GetModels() []ModelCapabilities {
 type cloudflareAPIPayload struct {
 	Prompt string `json:"prompt"`
 	Steps  int    `json:"steps,omitempty"`
+	Width  int    `json:"width,omitempty"`
+	Height int    `json:"height,omitempty"`
 }
 
 // cloudflareImageResponse matches the JSON response with base64 image data.
@@ -77,14 +81,42 @@ type cloudflareImageResponse struct {
 
 // Generate sends a request to the Cloudflare API.
 func (p *CloudflareProvider) Generate(input GenerationInput) (*GenerationOutput, error) {
-	steps := input.Steps
-	if steps == 0 {
-		steps = 8 // A reasonable default from the example
-	}
-
 	payload := cloudflareAPIPayload{
 		Prompt: input.Prompt,
-		Steps:  steps,
+	}
+
+	var modelCaps ModelCapabilities
+	found := false
+	for _, m := range p.GetModels() {
+		if m.Name == input.Model {
+			modelCaps = m
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return nil, fmt.Errorf("cloudflare: model %s not found or not supported", input.Model)
+	}
+
+	// Helper to check if a parameter is supported by the current model
+	isParamSupported := func(param string) bool {
+		for _, supportedParam := range modelCaps.SupportedParams {
+			if supportedParam == param {
+				return true
+			}
+		}
+		return false
+	}
+
+	if isParamSupported("steps") {
+		payload.Steps = input.Steps
+	}
+	if isParamSupported("width") {
+		payload.Width = input.Width
+	}
+	if isParamSupported("height") {
+		payload.Height = input.Height
 	}
 
 	logPayloadBytes, _ := json.MarshalIndent(payload, "", "  ")
@@ -96,13 +128,12 @@ func (p *CloudflareProvider) Generate(input GenerationInput) (*GenerationOutput,
 		return nil, fmt.Errorf("cloudflare: failed to marshal payload: %w", err)
 	}
 
-	apiURL := fmt.Sprintf(cloudflareAPIURLFormat, p.AccountID)
+	apiURL := fmt.Sprintf(cloudflareAPIURLFormat, p.AccountID, input.Model)
 	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		return nil, fmt.Errorf("cloudflare: failed to create request: %w", err)
 	}
 
-	// Set headers
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.APIToken)
 
@@ -117,21 +148,31 @@ func (p *CloudflareProvider) Generate(input GenerationInput) (*GenerationOutput,
 		return nil, fmt.Errorf("cloudflare: API returned non-200 status: %d, body: %s", resp.StatusCode, string(body))
 	}
 
-	var imageResp cloudflareImageResponse
-	if err := json.NewDecoder(resp.Body).Decode(&imageResp); err != nil {
-		return nil, fmt.Errorf("cloudflare: failed to decode response body: %w", err)
-	}
+	contentType := resp.Header.Get("Content-Type")
+	var imageData []byte
 
-	if !imageResp.Success || len(imageResp.Errors) > 0 {
-		if len(imageResp.Errors) > 0 {
-			return nil, fmt.Errorf("cloudflare: API error: %s", imageResp.Errors[0].Message)
+	if contentType == "image/png" {
+		imageData, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("cloudflare: failed to read image response body: %w", err)
 		}
-		return nil, fmt.Errorf("cloudflare: API reported failure but returned no error details")
-	}
+	} else { // Assume JSON response for other cases
+		var imageResp cloudflareImageResponse
+		if err := json.NewDecoder(resp.Body).Decode(&imageResp); err != nil {
+			return nil, fmt.Errorf("cloudflare: failed to decode json response body: %w", err)
+		}
 
-	imageData, err := base64.StdEncoding.DecodeString(imageResp.Result.Image)
-	if err != nil {
-		return nil, fmt.Errorf("cloudflare: failed to decode base64 image data: %w", err)
+		if !imageResp.Success || len(imageResp.Errors) > 0 {
+			if len(imageResp.Errors) > 0 {
+				return nil, fmt.Errorf("cloudflare: API error: %s", imageResp.Errors[0].Message)
+			}
+			return nil, fmt.Errorf("cloudflare: API reported failure but returned no error details")
+		}
+
+		imageData, err = base64.StdEncoding.DecodeString(imageResp.Result.Image)
+		if err != nil {
+			return nil, fmt.Errorf("cloudflare: failed to decode base64 image data: %w", err)
+		}
 	}
 
 	return &GenerationOutput{

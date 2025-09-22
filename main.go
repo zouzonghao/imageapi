@@ -17,12 +17,12 @@ import (
 	"strings"
 	"time"
 
+	"imageapi/config"
 	"imageapi/imagehost"
 	"imageapi/middleware"
 	"imageapi/providers"
 
 	"github.com/chai2010/webp"
-	"github.com/joho/godotenv"
 	"github.com/nfnt/resize"
 )
 
@@ -33,11 +33,9 @@ var (
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	// Load .env file
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("Warning: Could not load .env file")
-	}
+
+	// Load configuration
+	config.LoadConfig()
 
 	// Initialize and register all providers
 	initializeProviders()
@@ -46,7 +44,7 @@ func main() {
 	middleware.InitSessionStore()
 
 	// Initialize the image host client
-	nodeImageAPIKey := imagehost.GetNodeImageAPIKey()
+	nodeImageAPIKey := config.AppConfig.APIKeys.NodeImage
 	if nodeImageAPIKey == "" {
 		log.Println("Warning: NODEIMAGE_API_KEY is not set. Image hosting will be disabled.")
 	}
@@ -94,25 +92,23 @@ func initializeProviders() {
 	providerRegistry[dreamifly.GetName()] = dreamifly
 
 	// Fal.ai
-	falAIAPIKey := providers.GetFalAIAPIKey()
-	if falAIAPIKey != "" {
-		falAI := providers.NewFalAIProvider(falAIAPIKey)
+	if config.AppConfig.APIKeys.FalAI != "" {
+		falAI := providers.NewFalAIProvider(config.AppConfig.APIKeys.FalAI)
 		providerRegistry[falAI.GetName()] = falAI
 	} else {
 		log.Println("Warning: FAL_API_KEY not set, Fal.ai provider disabled.")
 	}
 
 	// ModelScope
-	modelScopeAPIKey := providers.GetModelScopeAPIKey()
-	if modelScopeAPIKey != "" {
-		modelScope := providers.NewModelScopeProvider(modelScopeAPIKey)
+	if config.AppConfig.APIKeys.ModelScope != "" {
+		modelScope := providers.NewModelScopeProvider(config.AppConfig.APIKeys.ModelScope)
 		providerRegistry[modelScope.GetName()] = modelScope
 	} else {
 		log.Println("Warning: MODELSCOPE_API_KEY not set, ModelScope provider disabled.")
 	}
 
 	// Pollinations.ai
-	pollinationsAPIKey := providers.GetPollinationsAIAPIKey()
+	pollinationsAPIKey := config.AppConfig.APIKeys.PollinationsAI
 	// This provider can work without an API key, so we initialize it anyway.
 	// The provider itself will handle whether to send the auth header.
 	pollinations := providers.NewPollinationsAIProvider(pollinationsAPIKey)
@@ -152,7 +148,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	webPassword := os.Getenv("WEB_PASSWORD")
+	webPassword := config.AppConfig.Settings.WebPassword
 	if webPassword == "" {
 		// This case should ideally not be reached if the middleware is correctly bypassed.
 		http.Error(w, "Web authentication is not enabled on the server.", http.StatusInternalServerError)
@@ -421,8 +417,7 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 	localFilepath := fmt.Sprintf("images/%s", finalFilename)
 
 	// Save the (potentially converted) image locally, if enabled.
-	saveLocalCopy := os.Getenv("SAVE_LOCAL_COPY")
-	if strings.ToLower(saveLocalCopy) != "false" {
+	if config.AppConfig.Settings.SaveLocalCopy {
 		if err := os.WriteFile(localFilepath, webpBytes, 0644); err != nil {
 			log.Printf("Warning: failed to save final image locally to %s: %v", localFilepath, err)
 		} else {
@@ -433,9 +428,7 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// --- 6. Decide How to Return the Image ---
-	uploadToHost := strings.ToLower(os.Getenv("UPLOAD_TO_IMAGE_HOST")) != "false"
-
-	if !uploadToHost {
+	if !config.AppConfig.Settings.UploadToImageHost {
 		// Return image data directly
 		log.Println("UPLOAD_TO_IMAGE_HOST is false, returning image data directly.")
 		w.Header().Set("Content-Type", "image/webp")

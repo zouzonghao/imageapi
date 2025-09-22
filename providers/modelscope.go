@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"time"
 )
 
@@ -189,9 +188,4 @@ func (p *ModelScopeProvider) Generate(input GenerationInput) (*GenerationOutput,
 	}
 
 	return nil, fmt.Errorf("Modelscope: polling timed out after %d attempts", maxPollingAttempts)
-}
-
-// GetModelScopeAPIKey retrieves the API key from environment variables.
-func GetModelScopeAPIKey() string {
-	return os.Getenv("MODELSCOPE_API_KEY")
 }

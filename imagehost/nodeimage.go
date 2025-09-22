@@ -7,7 +7,6 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-	"os"
 )
 
 const (
@@ -121,9 +120,4 @@ func (c *NodeImageClient) DeleteImage(imageID string) error {
 	}
 
 	return nil
-}
-
-// GetNodeImageAPIKey retrieves the API key from environment variables.
-func GetNodeImageAPIKey() string {
-	return os.Getenv("NODEIMAGE_API_KEY")
 }

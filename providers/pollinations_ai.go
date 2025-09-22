@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"time"
 )
 
@@ -142,9 +141,4 @@ func (p *PollinationsAIProvider) Generate(input GenerationInput) (*GenerationOut
 		ImageBytes: imageData,
 		Format:     format,
 	}, nil
-}
-
-// GetPollinationsAIAPIKey retrieves the API key from environment variables.
-func GetPollinationsAIAPIKey() string {
-	return os.Getenv("POLLINATIONS_AI_API_KEY")
 }

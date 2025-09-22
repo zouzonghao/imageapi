@@ -1,3 +1,4 @@
 images
 **.DS*
 .env
+conf.json

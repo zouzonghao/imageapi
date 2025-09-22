@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 )
 
 const falAIAPIURL = "https://fal.run/fal-ai/bytedance/seedream/v4/edit"
@@ -157,9 +156,4 @@ func (p *FalAIProvider) Generate(input GenerationInput) (*GenerationOutput, erro
 	return &GenerationOutput{
 		ImageBytes: imageData,
 	}, nil
-}
-
-// GetFalAIAPIKey retrieves the API key from environment variables.
-func GetFalAIAPIKey() string {
-	return os.Getenv("FAL_API_KEY")
 }

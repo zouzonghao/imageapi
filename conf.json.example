@@ -1,0 +1,19 @@
+{
+  "API_KEYS": {
+    "NODEIMAGE_API_KEY": "your_nodeimage_api_key_here",
+    "FAL_API_KEY": "your_fal_ai_api_key_here",
+    "MODELSCOPE_API_KEY": "your_modelscope_api_key_here",
+    "POLLINATIONS_AI_API_KEY": "your_pollinations_ai_api_key_here",
+    "IMAGEAPI_API_KEY": "your_secret_api_key"
+  },
+  "CLOUDFLARE_CREDENTIALS": {
+    "CLOUDFLARE_ACCOUNT_ID": "your_cloudflare_account_id_here",
+    "CLOUDFLARE_API_TOKEN": "your_cloudflare_api_token_here"
+  },
+  "SETTINGS": {
+    "SAVE_LOCAL_COPY": true,
+    "UPLOAD_TO_IMAGE_HOST": true,
+    "WEB_PASSWORD": "your_secret_password",
+    "SESSION_SECRET": "a_very_long_and_random_secret_string"
+  }
+}

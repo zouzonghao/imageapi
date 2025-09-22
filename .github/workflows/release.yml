@@ -1,0 +1,88 @@
+# 工作流名称
+name: Build and Release
+
+# 触发工作流的事件
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+' # 仅在 vX.Y.Z 格式的标签上触发
+  workflow_dispatch: # 允许手动触发
+
+# 工作流执行的任务
+jobs:
+  build-and-release:
+    # 任务运行的环境
+    # ubuntu-latest 默认已包含 gcc，所以 cgo 可以正常工作，解决了 sqlite 的编译问题
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write # 必须有写权限才能创建 Release
+
+    # 任务执行的步骤
+    steps:
+      # 步骤 1: 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 步骤 2: 设置 Go 环境
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      # 步骤 3: 下载 Go 依赖项
+      - name: Download Go modules
+        run: go mod download
+
+      # 步骤 4: 构建 Go 应用程序 (for Linux amd64)
+      # 在 ubuntu-latest 环境中构建，cgo 会被自动启用
+      - name: Build Go application for Linux (amd64)
+        run: GOOS=linux GOARCH=amd64 go build -o fileinpic .
+
+      # 步骤 5: 设置 Node.js 环境
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 步骤 6: 安装压缩工具
+      - name: Install minification tools
+        run: npm install -g terser csso-cli html-minifier
+
+      # 步骤 7: 压缩 JavaScript 文件
+      - name: Minify JavaScript files
+        run: |
+          terser static/app.js -o static/app.min.js -c -m
+          terser static/share.js -o static/share.min.js -c -m
+
+      # 步骤 8: 压缩 CSS 文件
+      - name: Minify CSS file
+        run: csso static/style.css -o static/style.min.css
+
+      # 步骤 9: 压缩 HTML 文件
+      - name: Minify HTML files
+        run: |
+          html-minifier --collapse-whitespace --remove-comments --remove-optional-tags --remove-redundant-attributes --remove-script-type-attributes --remove-tag-whitespace --use-short-doctype --minify-css true --minify-js true static/index.html -o static/index.min.html
+          html-minifier --collapse-whitespace --remove-comments --remove-optional-tags --remove-redundant-attributes --remove-script-type-attributes --remove-tag-whitespace --use-short-doctype --minify-css true --minify-js true static/login.html -o static/login.min.html
+          html-minifier --collapse-whitespace --remove-comments --remove-optional-tags --remove-redundant-attributes --remove-script-type-attributes --remove-tag-whitespace --use-short-doctype --minify-css true --minify-js true static/share.html -o static/share.min.html
+
+      # 步骤 10: 打包构建产物和静态文件
+      - name: Package artifact for release
+        run: |
+          # 删除原始文件
+          rm static/app.js static/share.js static/style.css static/index.html static/login.html static/share.html
+          # 重命名压缩后的文件
+          mv static/app.min.js static/app.js
+          mv static/share.min.js static/share.js
+          mv static/style.min.css static/style.css
+          mv static/index.min.html static/index.html
+          mv static/login.min.html static/login.html
+          mv static/share.min.html static/share.html
+          # 打包
+          tar -czf fileinpic-linux-amd64.tar.gz fileinpic static
+
+      # 步骤 11: 创建 Release 并上传构建产物
+      - name: Create Release and Upload Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: fileinpic-linux-amd64.tar.gz

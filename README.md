@@ -164,3 +164,18 @@ curl -X POST http://localhost:8080/api/v1/generate \
     }
     ```
     -   **注意**: `model` 必须选择支持图生图的模型 (例如 `Dreamifly/Flux-Kontext` 或 `modelscope/Qwen-Image-Edit`)，并且必须提供 `image_url`。
+
+**cURL 示例**:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/generate \
+-H "Authorization: Bearer your_secret_api_key" \
+-H "Content-Type: application/json" \
+-d '{
+    "prompt": "convert the style to anime",
+    "model": "pollinations_ai/kontext",
+    "width": 1024,
+    "height": 1024,
+    "image_url": "https://cdn.nodeimage.com/i/fLuSm5SOZfa0G1cyAT5REabrHMlqf5cn.jpg"
+}'
+```
