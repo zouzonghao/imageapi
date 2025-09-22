@@ -11,7 +11,10 @@ import (
 	"strings"
 )
 
-const dreamiflyAPIURL = "https://dreamifly.com/api/generate"
+const (
+	dreamiflyAPIURL               = "https://dreamifly.com/api/generate"
+	dreamiflyOptimizePromptAPIURL = "https://dreamifly.com/api/optimize-prompt"
+)
 
 // DreamiflyProvider implements the ImageProvider for Dreamifly.
 type DreamiflyProvider struct {
@@ -65,6 +68,60 @@ type dreamiflyAPIPayload struct {
 // ImageResponse matches the JSON response with base64 image data.
 type dreamiflyImageResponse struct {
 	ImageURL string `json:"imageUrl"`
+}
+
+// OptimizePrompt sends a request to the Dreamifly API to optimize a prompt.
+func (p *DreamiflyProvider) OptimizePrompt(prompt string) (string, error) {
+	payload := struct {
+		Prompt string `json:"prompt"`
+	}{
+		Prompt: prompt,
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("dreamifly: failed to marshal optimize prompt payload: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", dreamiflyOptimizePromptAPIURL, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return "", fmt.Errorf("dreamifly: failed to create optimize prompt request: %w", err)
+	}
+
+	// Set headers from API doc
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Origin", "https://dreamifly.com")
+	req.Header.Set("Referer", "https://dreamifly.com/zh")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
+
+	log.Printf("Calling Dreamifly prompt optimization for: \"%s\"", prompt)
+
+	resp, err := p.Client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("dreamifly: failed to call optimize prompt API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("dreamifly: optimize prompt API returned non-200 status: %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var optimizeResp struct {
+		Success         bool   `json:"success"`
+		OriginalPrompt  string `json:"originalPrompt"`
+		OptimizedPrompt string `json:"optimizedPrompt"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&optimizeResp); err != nil {
+		return "", fmt.Errorf("dreamifly: failed to decode optimize prompt response: %w", err)
+	}
+
+	if !optimizeResp.Success {
+		return "", fmt.Errorf("dreamifly: optimize prompt API reported failure")
+	}
+
+	return optimizeResp.OptimizedPrompt, nil
 }
 
 // Generate sends a request to the Dreamifly API.

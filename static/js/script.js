@@ -138,12 +138,25 @@ document.addEventListener('DOMContentLoaded', function () {
         })
             .then(response => {
                 if (!response.ok) {
-                    return response.text().then(text => { throw new Error(text) });
+                    // Try to get error text from the server for better feedback
+                    return response.text().then(text => { throw new Error(text || 'Server error') });
                 }
-                return response.json();
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.includes("application/json")) {
+                    return response.json().then(data => ({ type: 'json', body: data }));
+                } else if (contentType && contentType.startsWith("image/")) {
+                    return response.blob().then(blob => ({ type: 'image', body: blob }));
+                } else {
+                    throw new Error('Unexpected response type from server.');
+                }
             })
             .then(data => {
-                resultContainer.innerHTML = `<img src="${data.imageUrl}" alt="Generated Image">`;
+                if (data.type === 'json') {
+                    resultContainer.innerHTML = `<img src="${data.body.imageUrl}" alt="Generated Image">`;
+                } else if (data.type === 'image') {
+                    const imageUrl = URL.createObjectURL(data.body);
+                    resultContainer.innerHTML = `<img src="${imageUrl}" alt="Generated Image">`;
+                }
             })
             .catch(error => {
                 console.error('Error:', error);

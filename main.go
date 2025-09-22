@@ -302,12 +302,7 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 	// The deletion is now handled by the deferred function call.
 	// The explicit deletion block is no longer needed here.
 
-	// --- 5. Process and Upload Final Image ---
-	if imageHostClient == nil {
-		http.Error(w, "Image hosting is not configured, cannot return final image URL", http.StatusInternalServerError)
-		return
-	}
-
+	// --- 5. Process and Return Final Image ---
 	finalImageBytes := output.ImageBytes
 	// The logic for downloading from a provider's URL is now removed,
 	// as all providers are expected to return image bytes directly.
@@ -317,35 +312,57 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert the final image to WebP before uploading.
+	// Convert the final image to WebP for consistency and smaller size.
 	webpBytes, err := convertToWebP(finalImageBytes)
 	if err != nil {
 		// If conversion fails, log the error but proceed with the original image.
-		log.Printf("Warning: failed to convert image to WebP: %v. Uploading original format.", err)
+		log.Printf("Warning: failed to convert image to WebP: %v. Using original format.", err)
 		webpBytes = finalImageBytes // Fallback to original bytes
 	} else {
 		log.Printf("Successfully converted final image to WebP. Original size: %d, WebP size: %d", len(finalImageBytes), len(webpBytes))
 	}
 
-	// Always use .webp extension for consistency.
+	// Generate a filename for potential local saving or content disposition header.
 	now := time.Now()
 	randomSuffix := rand.Intn(1000)
-	localFilename := fmt.Sprintf("images/%s_%03d.webp", now.Format("2006_0102_150405"), randomSuffix)
+	finalFilename := fmt.Sprintf("%s_%03d.webp", now.Format("2006_0102_150405"), randomSuffix)
+	localFilepath := fmt.Sprintf("images/%s", finalFilename)
 
 	// Save the (potentially converted) image locally, if enabled.
 	saveLocalCopy := os.Getenv("SAVE_LOCAL_COPY")
 	if strings.ToLower(saveLocalCopy) != "false" {
-		if err := os.WriteFile(localFilename, webpBytes, 0644); err != nil {
-			log.Printf("Warning: failed to save final image locally to %s: %v", localFilename, err)
+		if err := os.WriteFile(localFilepath, webpBytes, 0644); err != nil {
+			log.Printf("Warning: failed to save final image locally to %s: %v", localFilepath, err)
 		} else {
-			log.Printf("Successfully saved final image to %s", localFilename)
+			log.Printf("Successfully saved final image to %s", localFilepath)
 		}
 	} else {
 		log.Println("Local save is disabled; skipping writing file to disk.")
 	}
 
+	// --- 6. Decide How to Return the Image ---
+	uploadToHost := strings.ToLower(os.Getenv("UPLOAD_TO_IMAGE_HOST")) != "false"
+
+	if !uploadToHost {
+		// Return image data directly
+		log.Println("UPLOAD_TO_IMAGE_HOST is false, returning image data directly.")
+		w.Header().Set("Content-Type", "image/webp")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", finalFilename))
+		w.Write(webpBytes)
+		log.Println("Successfully returned final image data to client.")
+		return
+	}
+
+	// --- 7. Upload and Return URL (Default Behavior) ---
+	if imageHostClient == nil {
+		errStr := "Image hosting is not configured, cannot return final image URL. Set UPLOAD_TO_IMAGE_HOST=false to return image data directly."
+		log.Println(errStr)
+		http.Error(w, errStr, http.StatusInternalServerError)
+		return
+	}
+
 	log.Println("Uploading final image to image host...")
-	finalUpload, err := imageHostClient.UploadImage(webpBytes, localFilename)
+	finalUpload, err := imageHostClient.UploadImage(webpBytes, localFilepath)
 	if err != nil {
 		errStr := fmt.Sprintf("Failed to upload final image: %v", err)
 		log.Println(errStr)
@@ -353,7 +370,6 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// --- 6. Return Final URL to Client ---
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"imageUrl": finalUpload.Links.Direct,
@@ -453,9 +469,20 @@ func handleOptimizePrompt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	originalPrompt := requestData.Prompt
-	// A simple optimization: append high-quality keywords.
-	// This can be replaced with a more sophisticated LLM call in the future.
-	optimizedPrompt := originalPrompt + ", best quality, masterpiece, highly detailed, cinematic lighting, anime style"
+	// Get the dreamifly provider. We assume it's always registered.
+	provider, ok := providerRegistry["dreamifly"].(*providers.DreamiflyProvider)
+	if !ok {
+		http.Error(w, "Dreamifly provider is not available", http.StatusInternalServerError)
+		return
+	}
+
+	optimizedPrompt, err := provider.OptimizePrompt(originalPrompt)
+	if err != nil {
+		errStr := fmt.Sprintf("Error from prompt optimization provider: %v", err)
+		log.Println(errStr)
+		http.Error(w, errStr, http.StatusInternalServerError)
+		return
+	}
 
 	responseData := map[string]string{
 		"optimized_prompt": optimizedPrompt,
