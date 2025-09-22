@@ -39,7 +39,7 @@ func NewModelScopeProvider(apiKey string) *ModelScopeProvider {
 
 // GetName returns the name of the provider.
 func (p *ModelScopeProvider) GetName() string {
-	return "modelscope"
+	return "Modelscope"
 }
 
 // RequiresImageURL returns true as ModelScope requires an image URL.
@@ -94,13 +94,13 @@ func (p *ModelScopeProvider) Generate(input GenerationInput) (*GenerationOutput,
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("modelscope: failed to marshal payload: %w", err)
+		return nil, fmt.Errorf("Modelscope: failed to marshal payload: %w", err)
 	}
 
 	// 1. Initiate the generation task
 	req, err := http.NewRequest("POST", modelScopeAPIURL, bytes.NewBuffer(payloadBytes))
 	if err != nil {
-		return nil, fmt.Errorf("modelscope: failed to create request: %w", err)
+		return nil, fmt.Errorf("Modelscope: failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.APIKey)
@@ -108,25 +108,25 @@ func (p *ModelScopeProvider) Generate(input GenerationInput) (*GenerationOutput,
 
 	resp, err := p.Client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("modelscope: failed to call generation API: %w", err)
+		return nil, fmt.Errorf("Modelscope: failed to call generation API: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("modelscope: generation API returned non-200 status: %d, body: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("Modelscope: generation API returned non-200 status: %d, body: %s", resp.StatusCode, string(body))
 	}
 
 	var asyncResp modelScopeAsyncResponse
 	if err := json.NewDecoder(resp.Body).Decode(&asyncResp); err != nil {
-		return nil, fmt.Errorf("modelscope: failed to decode async response: %w", err)
+		return nil, fmt.Errorf("Modelscope: failed to decode async response: %w", err)
 	}
 
 	if asyncResp.TaskID == "" {
-		return nil, fmt.Errorf("modelscope: did not receive a task ID")
+		return nil, fmt.Errorf("Modelscope: did not receive a task ID")
 	}
 
-	log.Printf("modelscope: task submitted successfully, task_id: %s", asyncResp.TaskID)
+	log.Printf("Modelscope: task submitted successfully, task_id: %s", asyncResp.TaskID)
 
 	// 2. Poll for the result
 	taskURL := modelScopeTaskURL + asyncResp.TaskID
@@ -135,33 +135,33 @@ func (p *ModelScopeProvider) Generate(input GenerationInput) (*GenerationOutput,
 
 		pollReq, err := http.NewRequest("GET", taskURL, nil)
 		if err != nil {
-			return nil, fmt.Errorf("modelscope: failed to create polling request: %w", err)
+			return nil, fmt.Errorf("Modelscope: failed to create polling request: %w", err)
 		}
 		pollReq.Header.Set("Authorization", "Bearer "+p.APIKey)
 		pollReq.Header.Set("X-ModelScope-Task-Type", "image_generation")
 
 		pollResp, err := p.Client.Do(pollReq)
 		if err != nil {
-			return nil, fmt.Errorf("modelscope: failed to execute polling request: %w", err)
+			return nil, fmt.Errorf("Modelscope: failed to execute polling request: %w", err)
 		}
 		defer pollResp.Body.Close()
 
 		if pollResp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(pollResp.Body)
 			// Log the error but continue polling, as the task might still be processing or temporarily unavailable
-			log.Printf("modelscope: polling returned non-200 status: %d, body: %s", pollResp.StatusCode, string(body))
+			log.Printf("Modelscope: polling returned non-200 status: %d, body: %s", pollResp.StatusCode, string(body))
 			continue
 		}
 
 		bodyBytes, err := io.ReadAll(pollResp.Body)
 		if err != nil {
-			return nil, fmt.Errorf("modelscope: failed to read polling response body: %w", err)
+			return nil, fmt.Errorf("Modelscope: failed to read polling response body: %w", err)
 		}
 
 		var taskResp modelScopeTaskResponse
 		if err := json.Unmarshal(bodyBytes, &taskResp); err != nil {
 			// Return the raw body if JSON decoding fails
-			return nil, fmt.Errorf("modelscope: failed to decode task response: %w, body: %s", err, string(bodyBytes))
+			return nil, fmt.Errorf("Modelscope: failed to decode task response: %w, body: %s", err, string(bodyBytes))
 		}
 
 		switch taskResp.TaskStatus {
@@ -170,15 +170,15 @@ func (p *ModelScopeProvider) Generate(input GenerationInput) (*GenerationOutput,
 				imageURL := taskResp.OutputImages[0]
 				imageData, _, err := DownloadFile(imageURL)
 				if err != nil {
-					return nil, fmt.Errorf("modelscope: failed to download generated image: %w", err)
+					return nil, fmt.Errorf("Modelscope: failed to download generated image: %w", err)
 				}
 				return &GenerationOutput{
 					ImageBytes: imageData,
 				}, nil
 			}
-			return nil, fmt.Errorf("modelscope: task succeeded but no image URL was returned")
+			return nil, fmt.Errorf("Modelscope: task succeeded but no image URL was returned")
 		case "FAILED", "CANCELED":
-			errMsg := "modelscope: task failed or was canceled"
+			errMsg := "Modelscope: task failed or was canceled"
 			if taskResp.Errors.Message != "" {
 				errMsg = fmt.Sprintf("%s. Reason: %s", errMsg, taskResp.Errors.Message)
 			}
@@ -188,7 +188,7 @@ func (p *ModelScopeProvider) Generate(input GenerationInput) (*GenerationOutput,
 		// Otherwise, continue polling
 	}
 
-	return nil, fmt.Errorf("modelscope: polling timed out after %d attempts", maxPollingAttempts)
+	return nil, fmt.Errorf("Modelscope: polling timed out after %d attempts", maxPollingAttempts)
 }
 
 // GetModelScopeAPIKey retrieves the API key from environment variables.

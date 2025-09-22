@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 optgroup.label = provider.provider;
                 provider.models.forEach(model => {
                     const option = document.createElement('option');
-                    option.value = `${provider.provider}/${model.name}`;
+                    option.value = model.name;
                     option.textContent = model.name;
                     // Store the entire model info object in a data attribute
                     option.dataset.modelInfo = JSON.stringify(model);

@@ -1,10 +1,12 @@
-module dreamifly
+module imageapi
 
 go 1.24.0
 
-replace dreamifly/imagehost => ./imagehost
+replace imageapi/imagehost => ./imagehost
 
-replace dreamifly/providers => ./providers
+replace imageapi/providers => ./providers
+
+replace imageapi/middleware => ./middleware
 
 require (
 	github.com/chai2010/webp v1.4.0
@@ -14,5 +16,7 @@ require (
 
 require (
 	github.com/disintegration/imaging v1.6.2 // indirect
+	github.com/gorilla/securecookie v1.1.2 // indirect
+	github.com/gorilla/sessions v1.4.0 // indirect
 	golang.org/x/image v0.0.0-20211028202545-6944b10bf410 // indirect
 )

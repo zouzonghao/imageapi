@@ -39,7 +39,7 @@ func NewDreamiflyProvider() *DreamiflyProvider {
 
 // GetName returns the name of the provider.
 func (p *DreamiflyProvider) GetName() string {
-	return "dreamifly"
+	return "Dreamifly"
 }
 
 // RequiresImageURL returns false as Dreamifly accepts image bytes directly.

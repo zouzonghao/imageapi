@@ -33,7 +33,7 @@ func NewPollinationsAIProvider(apiKey string) *PollinationsAIProvider {
 
 // GetName returns the name of the provider.
 func (p *PollinationsAIProvider) GetName() string {
-	return "pollinations_ai"
+	return "Pollinations_ai"
 }
 
 // RequiresImageURL returns true as Pollinations.ai requires an image URL.
@@ -57,7 +57,7 @@ func (p *PollinationsAIProvider) Generate(input GenerationInput) (*GenerationOut
 	// This provider requires an image URL. The main handler is now responsible
 	// for uploading the image and providing the URL in input.ImageURL.
 	if input.ImageURL == "" && input.Model == "kontext" { // Kontext model requires an image
-		return nil, fmt.Errorf("pollinations_ai: model '%s' requires an image URL", input.Model)
+		return nil, fmt.Errorf("Pollinations_ai: model '%s' requires an image URL", input.Model)
 	}
 
 	// For img2img, add the final image URL as a query parameter.
@@ -84,7 +84,7 @@ func (p *PollinationsAIProvider) Generate(input GenerationInput) (*GenerationOut
 
 	req, err := http.NewRequest("GET", fullURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("pollinations_ai: failed to create request: %w", err)
+		return nil, fmt.Errorf("Pollinations_ai: failed to create request: %w", err)
 	}
 
 	if p.APIKey != "" {
@@ -104,7 +104,7 @@ func (p *PollinationsAIProvider) Generate(input GenerationInput) (*GenerationOut
 				time.Sleep(retryInterval)
 				continue
 			}
-			return nil, fmt.Errorf("pollinations_ai: failed to call external API after %d attempts: %w", maxRetries, err)
+			return nil, fmt.Errorf("Pollinations_ai: failed to call external API after %d attempts: %w", maxRetries, err)
 		}
 
 		if resp.StatusCode == http.StatusOK {
@@ -122,14 +122,14 @@ func (p *PollinationsAIProvider) Generate(input GenerationInput) (*GenerationOut
 			continue
 		}
 
-		return nil, fmt.Errorf("pollinations_ai: giving up after %d attempts: %w", maxRetries, err)
+		return nil, fmt.Errorf("Pollinations_ai: giving up after %d attempts: %w", maxRetries, err)
 	}
 	defer resp.Body.Close()
 
 	// The response is the raw image data
 	imageData, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("pollinations_ai: failed to read image data: %w", err)
+		return nil, fmt.Errorf("Pollinations_ai: failed to read image data: %w", err)
 	}
 
 	contentType := resp.Header.Get("Content-Type")

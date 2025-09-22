@@ -32,7 +32,7 @@ func NewFalAIProvider(apiKey string) *FalAIProvider {
 
 // GetName returns the name of the provider.
 func (p *FalAIProvider) GetName() string {
-	return "fal_ai"
+	return "Fal_ai"
 }
 
 // RequiresImageURL returns true as Fal.ai requires an image URL.
@@ -68,7 +68,7 @@ func (p *FalAIProvider) Generate(input GenerationInput) (*GenerationOutput, erro
 	// This provider requires an image URL. The main handler should have uploaded
 	// the image if bytes were provided.
 	if input.ImageURL == "" {
-		return nil, fmt.Errorf("fal_ai: image URL is required")
+		return nil, fmt.Errorf("Fal_ai: image URL is required")
 	}
 
 	payload := falAIAPIPayload{
@@ -89,12 +89,12 @@ func (p *FalAIProvider) Generate(input GenerationInput) (*GenerationOutput, erro
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("fal_ai: failed to marshal payload: %w", err)
+		return nil, fmt.Errorf("Fal_ai: failed to marshal payload: %w", err)
 	}
 
 	req, err := http.NewRequest("POST", falAIAPIURL, bytes.NewBuffer(payloadBytes))
 	if err != nil {
-		return nil, fmt.Errorf("fal_ai: failed to create request: %w", err)
+		return nil, fmt.Errorf("Fal_ai: failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -102,29 +102,29 @@ func (p *FalAIProvider) Generate(input GenerationInput) (*GenerationOutput, erro
 
 	resp, err := p.Client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fal_ai: failed to call external API: %w", err)
+		return nil, fmt.Errorf("Fal_ai: failed to call external API: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("fal_ai: API returned non-200 status: %d, body: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("Fal_ai: API returned non-200 status: %d, body: %s", resp.StatusCode, string(body))
 	}
 
 	var apiResp falAIAPIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		return nil, fmt.Errorf("fal_ai: failed to decode response: %w", err)
+		return nil, fmt.Errorf("Fal_ai: failed to decode response: %w", err)
 	}
 
 	if len(apiResp.Images) == 0 {
-		return nil, fmt.Errorf("fal_ai: no images returned in response")
+		return nil, fmt.Errorf("Fal_ai: no images returned in response")
 	}
 
 	// The response from Fal.ai is a URL. Download the image bytes.
 	imageURL := apiResp.Images[0].URL
 	imageData, _, err := DownloadFile(imageURL)
 	if err != nil {
-		return nil, fmt.Errorf("fal_ai: failed to download generated image: %w", err)
+		return nil, fmt.Errorf("Fal_ai: failed to download generated image: %w", err)
 	}
 
 	return &GenerationOutput{
