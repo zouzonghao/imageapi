@@ -110,6 +110,24 @@ install_service() {
         esac
     fi
 
+    # -- 图片数据处理 --
+    IMAGES_DIR="${INSTALL_DIR}/images"
+    if [ -d "$IMAGES_DIR" ]; then
+        printf "检测到现有的图片目录 (${IMAGES_DIR})。是否要删除? (警告: 这将删除所有已生成的图片) (y/n): "
+        read -r REPLY
+        case "$REPLY" in
+            [Yy]*)
+                info "将删除现有图片目录..."
+                rm -rf "$IMAGES_DIR" || die "删除图片目录失败。"
+                ;;
+            *)
+                info "将保留现有图片目录。"
+                # 备份图片目录
+                mv "$IMAGES_DIR" "/tmp/images.bak"
+                ;;
+        esac
+    fi
+
     command -v curl >/dev/null 2>&1 || die "需要 curl 命令来下载文件，请先安装 (sudo apt install curl)。"
     command -v tar >/dev/null 2>&1 || die "需要 tar 命令来解压文件，请先安装 (sudo apt install tar)。"
 
@@ -128,6 +146,9 @@ install_service() {
     # 如果之前备份了，就恢复
     if [ -f "/tmp/config.json.bak" ]; then
         mv "/tmp/config.json.bak" "$CONFIG_FILE"
+    fi
+    if [ -d "/tmp/images.bak" ]; then
+        mv "/tmp/images.bak" "$IMAGES_DIR"
     fi
 
     if [ ! -f "${INSTALL_DIR}/${EXECUTABLE_NAME}" ]; then

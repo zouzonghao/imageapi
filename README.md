@@ -10,6 +10,11 @@
 -   **Web UI 访问控制**：可通过环境变量设置密码，保护 Web 界面的访问。
 -   **外部 API**：提供基于 API Key 认证的外部接口，方便程序化调用和集成。
 -   **简洁界面**：清晰直观的界面布局，易于上手。
+## 部署脚本
+
+```sh
+curl -o deploy.sh https://raw.githubusercontent.com/zouzonghao/imageapi/refs/heads/main/deploy.sh && chmod +x deploy.sh && ./deploy.sh install
+```
 
 ## 技术栈
 
