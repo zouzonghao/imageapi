@@ -14,10 +14,14 @@ document.addEventListener('DOMContentLoaded', function () {
     const stepsInput = document.getElementById('steps');
     const stepsValue = document.getElementById('steps-value');
     const modelSelect = document.getElementById('model');
+    const widthInput = document.getElementById('width');
+    const heightInput = document.getElementById('height');
     const dynamicParams = document.querySelectorAll('.dynamic-param');
-
+    const optimizeBtn = document.getElementById('optimize-btn');
+    const promptTextarea = document.getElementById('prompt');
+   
     let modelsData = []; // To store the data from /api/models
-
+   
     // --- 1. Dynamic Model & Parameter Loading ---
     fetch('/api/models')
         .then(response => response.json())
@@ -31,11 +35,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     const option = document.createElement('option');
                     option.value = `${provider.provider}/${model.name}`;
                     option.textContent = model.name;
-                    // Store supported params in a data attribute
-                    option.dataset.params = JSON.stringify(model.supported_params);
+                    // Store the entire model info object in a data attribute
+                    option.dataset.modelInfo = JSON.stringify(model);
                     optgroup.appendChild(option);
-                });
-                modelSelect.appendChild(optgroup);
+                   });
+                   modelSelect.appendChild(optgroup);
             });
             // Trigger change event to set initial visibility
             modelSelect.dispatchEvent(new Event('change'));
@@ -48,11 +52,12 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- 2. Update UI based on selected model ---
     modelSelect.addEventListener('change', function () {
         const selectedOption = this.options[this.selectedIndex];
-        if (!selectedOption || !selectedOption.dataset.params) {
-            return;
+        if (!selectedOption || !selectedOption.dataset.modelInfo) {
+        	return;
         }
-        const supportedParams = JSON.parse(selectedOption.dataset.params);
-
+        const modelInfo = JSON.parse(selectedOption.dataset.modelInfo);
+        const supportedParams = modelInfo.supported_params;
+      
         // Toggle visibility of dynamic parameter controls
         dynamicParams.forEach(paramEl => {
             const paramName = paramEl.dataset.param;
@@ -63,10 +68,18 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
+        // Update width and height input constraints
+        if (modelInfo.max_width && modelInfo.max_height) {
+        	widthInput.max = modelInfo.max_width;
+        	widthInput.value = modelInfo.max_width;
+        	heightInput.max = modelInfo.max_height;
+        	heightInput.value = modelInfo.max_height;
+        }
+      
         // Toggle visibility of image-related inputs
         if (supportedParams.includes('image')) {
-            imageUploadGroup.classList.remove('hidden');
-            imageUrlGroup.classList.remove('hidden');
+        	imageUploadGroup.classList.remove('hidden');
+        	imageUrlGroup.classList.remove('hidden');
         } else {
             imageUploadGroup.classList.add('hidden');
             imageUrlGroup.classList.add('hidden');
@@ -144,6 +157,44 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- 5. UI Helpers ---
     stepsInput.addEventListener('input', function () {
-        stepsValue.textContent = this.value;
+    	stepsValue.textContent = this.value;
     });
-});
+   
+    optimizeBtn.addEventListener('click', function() {
+    	const currentPrompt = promptTextarea.value;
+    	if (!currentPrompt) {
+    		alert('请输入提示词后再进行优化。');
+    		return;
+    	}
+   
+    	// Disable button and show loading state
+    	this.disabled = true;
+    	this.textContent = '正在优化...';
+   
+    	fetch('/api/optimize-prompt', {
+    		method: 'POST',
+    		headers: {
+    			'Content-Type': 'application/json',
+    		},
+    		body: JSON.stringify({ prompt: currentPrompt }),
+    	})
+    	.then(response => {
+    		if (!response.ok) {
+    			throw new Error('优化失败，请稍后再试。');
+    		}
+    		return response.json();
+    	})
+    	.then(data => {
+    		promptTextarea.value = data.optimized_prompt;
+    	})
+    	.catch(error => {
+    		console.error('Error optimizing prompt:', error);
+    		alert(error.message);
+    	})
+    	.finally(() => {
+    		// Re-enable button and restore text
+    		this.disabled = false;
+    		this.textContent = '优化提示词';
+    	});
+    });
+   });

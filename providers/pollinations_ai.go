@@ -18,6 +18,11 @@ type PollinationsAIProvider struct {
 	Client *http.Client
 }
 
+var pollinationsAIModels = []ModelCapabilities{
+	{Name: "flux", SupportedParams: []string{"seed"}, MaxWidth: 1024, MaxHeight: 1024},
+	{Name: "kontext", SupportedParams: []string{"seed", "image"}, MaxWidth: 1024, MaxHeight: 1024},
+}
+
 // NewPollinationsAIProvider creates a new Pollinations.ai client.
 func NewPollinationsAIProvider(apiKey string) *PollinationsAIProvider {
 	return &PollinationsAIProvider{
@@ -34,6 +39,11 @@ func (p *PollinationsAIProvider) GetName() string {
 // RequiresImageURL returns true as Pollinations.ai requires an image URL.
 func (p *PollinationsAIProvider) RequiresImageURL() bool {
 	return true
+}
+
+// GetModels returns the list of models and their capabilities for Pollinations.ai.
+func (p *PollinationsAIProvider) GetModels() []ModelCapabilities {
+	return pollinationsAIModels
 }
 
 // Generate sends a request to the Pollinations.ai API.

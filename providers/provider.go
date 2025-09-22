@@ -1,5 +1,13 @@
 package providers
 
+// ModelCapabilities defines the specific capabilities of an AI model.
+type ModelCapabilities struct {
+	Name            string   `json:"name"`
+	SupportedParams []string `json:"supported_params"`
+	MaxWidth        int      `json:"max_width"`
+	MaxHeight       int      `json:"max_height"`
+}
+
 // GenerationInput defines the standardized input for all AI providers.
 type GenerationInput struct {
 	Prompt     string
@@ -25,6 +33,8 @@ type ImageProvider interface {
 	Generate(input GenerationInput) (*GenerationOutput, error)
 	// GetName returns the name of the provider (e.g., "dreamifly").
 	GetName() string
+	// GetModels returns a list of models supported by the provider and their capabilities.
+	GetModels() []ModelCapabilities
 	// RequiresImageURL returns true if the provider needs an image URL
 	// instead of image bytes for image-to-image tasks.
 	RequiresImageURL() bool

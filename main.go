@@ -63,6 +63,7 @@ func main() {
 	// Handle the API requests
 	http.HandleFunc("/api/generate", handleGenerate)
 	http.HandleFunc("/api/models", handleGetModels)
+	http.HandleFunc("/api/optimize-prompt", handleOptimizePrompt)
 
 	log.Println("Starting server on :8080...")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
@@ -112,10 +113,12 @@ func serveIndex(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "templates/index.html")
 }
 
-// ModelInfo defines the structure for the model list API response.
+// ModelDetail defines the structure for the model list API response.
 type ModelDetail struct {
 	Name            string   `json:"name"`
 	SupportedParams []string `json:"supported_params"`
+	MaxWidth        int      `json:"max_width"`
+	MaxHeight       int      `json:"max_height"`
 }
 
 type ProviderInfo struct {
@@ -124,46 +127,27 @@ type ProviderInfo struct {
 }
 
 func handleGetModels(w http.ResponseWriter, r *http.Request) {
-	// This list is hardcoded for now based on the API docs.
-	// We now include which parameters each model supports.
-	providers := []ProviderInfo{
-		{
-			Provider: "dreamifly",
-			Models: []ModelDetail{
-				{Name: "Flux-Kontext", SupportedParams: []string{"steps", "seed", "image"}},
-				{Name: "Qwen-Image-Edit", SupportedParams: []string{"steps", "seed", "image"}},
-				{Name: "Wai-SDXL-V150", SupportedParams: []string{"steps", "seed"}},
-				{Name: "Flux-Krea", SupportedParams: []string{"steps", "seed"}},
-				{Name: "HiDream-full-fp8", SupportedParams: []string{"steps", "seed"}},
-				{Name: "Qwen-Image", SupportedParams: []string{"steps", "seed"}},
-			},
-		},
-		{
-			Provider: "fal_ai",
-			Models:   []ModelDetail{{Name: "bytedance/seedream/v4/edit", SupportedParams: []string{"seed", "image"}}},
-		},
-		{
-			Provider: "modelscope",
-			Models: []ModelDetail{
-				{Name: "Qwen/Qwen-Image", SupportedParams: []string{"seed"}},
-				{Name: "Qwen/Qwen-Image-Edit", SupportedParams: []string{"seed", "image"}},
-			},
-		},
-		{
-			Provider: "pollinations_ai",
-			Models: []ModelDetail{
-				{Name: "flux", SupportedParams: []string{"seed"}},
-				{Name: "kontext", SupportedParams: []string{"seed", "image"}},
-			},
-		},
-	}
-
-	// Filter out providers that are not configured
 	var availableProviders []ProviderInfo
-	for _, p := range providers {
-		if _, ok := providerRegistry[p.Provider]; ok {
-			availableProviders = append(availableProviders, p)
+
+	// Iterate over the registered providers to dynamically build the response.
+	for name, provider := range providerRegistry {
+		modelsFromProvider := provider.GetModels()
+		modelsForAPI := make([]ModelDetail, len(modelsFromProvider))
+
+		for i, m := range modelsFromProvider {
+			modelsForAPI[i] = ModelDetail{
+				Name:            m.Name,
+				SupportedParams: m.SupportedParams,
+				MaxWidth:        m.MaxWidth,
+				MaxHeight:       m.MaxHeight,
+			}
 		}
+
+		providerInfo := ProviderInfo{
+			Provider: name,
+			Models:   modelsForAPI,
+		}
+		availableProviders = append(availableProviders, providerInfo)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -344,13 +328,20 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Always use .webp extension for consistency.
-	localFilename := fmt.Sprintf("images/%d.webp", time.Now().UnixNano())
+	now := time.Now()
+	randomSuffix := rand.Intn(1000)
+	localFilename := fmt.Sprintf("images/%s_%03d.webp", now.Format("2006_0102_150405"), randomSuffix)
 
-	// Save the (potentially converted) image locally.
-	if err := os.WriteFile(localFilename, webpBytes, 0644); err != nil {
-		log.Printf("Warning: failed to save final image locally to %s: %v", localFilename, err)
+	// Save the (potentially converted) image locally, if enabled.
+	saveLocalCopy := os.Getenv("SAVE_LOCAL_COPY")
+	if strings.ToLower(saveLocalCopy) != "false" {
+		if err := os.WriteFile(localFilename, webpBytes, 0644); err != nil {
+			log.Printf("Warning: failed to save final image locally to %s: %v", localFilename, err)
+		} else {
+			log.Printf("Successfully saved final image to %s", localFilename)
+		}
 	} else {
-		log.Printf("Successfully saved final image to %s", localFilename)
+		log.Println("Local save is disabled; skipping writing file to disk.")
 	}
 
 	log.Println("Uploading final image to image host...")
@@ -437,4 +428,39 @@ func convertToWebP(imageBytes []byte) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+func handleOptimizePrompt(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Could not read request body", http.StatusInternalServerError)
+		return
+	}
+	defer r.Body.Close()
+
+	var requestData struct {
+		Prompt string `json:"prompt"`
+	}
+
+	if err := json.Unmarshal(body, &requestData); err != nil {
+		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+		return
+	}
+
+	originalPrompt := requestData.Prompt
+	// A simple optimization: append high-quality keywords.
+	// This can be replaced with a more sophisticated LLM call in the future.
+	optimizedPrompt := originalPrompt + ", best quality, masterpiece, highly detailed, cinematic lighting, anime style"
+
+	responseData := map[string]string{
+		"optimized_prompt": optimizedPrompt,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(responseData)
 }

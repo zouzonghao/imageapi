@@ -24,6 +24,11 @@ type ModelScopeProvider struct {
 	Client *http.Client
 }
 
+var modelScopeModels = []ModelCapabilities{
+	{Name: "Qwen/Qwen-Image", SupportedParams: []string{"seed"}, MaxWidth: 2048, MaxHeight: 2048},
+	{Name: "Qwen/Qwen-Image-Edit", SupportedParams: []string{"seed", "image"}, MaxWidth: 2048, MaxHeight: 2048},
+}
+
 // NewModelScopeProvider creates a new ModelScope client.
 func NewModelScopeProvider(apiKey string) *ModelScopeProvider {
 	return &ModelScopeProvider{
@@ -40,6 +45,11 @@ func (p *ModelScopeProvider) GetName() string {
 // RequiresImageURL returns true as ModelScope requires an image URL.
 func (p *ModelScopeProvider) RequiresImageURL() bool {
 	return true
+}
+
+// GetModels returns the list of models and their capabilities for ModelScope.
+func (p *ModelScopeProvider) GetModels() []ModelCapabilities {
+	return modelScopeModels
 }
 
 type modelScopeAPIPayload struct {

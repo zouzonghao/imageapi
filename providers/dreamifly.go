@@ -18,6 +18,15 @@ type DreamiflyProvider struct {
 	Client *http.Client
 }
 
+var dreamiflyModels = []ModelCapabilities{
+	{Name: "Flux-Kontext", SupportedParams: []string{"steps", "seed", "image"}, MaxWidth: 1920, MaxHeight: 1920},
+	{Name: "Qwen-Image-Edit", SupportedParams: []string{"steps", "seed", "image"}, MaxWidth: 1920, MaxHeight: 1920},
+	{Name: "Wai-SDXL-V150", SupportedParams: []string{"steps", "seed"}, MaxWidth: 1920, MaxHeight: 1920},
+	{Name: "Flux-Krea", SupportedParams: []string{"steps", "seed"}, MaxWidth: 1920, MaxHeight: 1920},
+	{Name: "HiDream-full-fp8", SupportedParams: []string{"steps", "seed"}, MaxWidth: 1920, MaxHeight: 1920},
+	{Name: "Qwen-Image", SupportedParams: []string{"steps", "seed"}, MaxWidth: 1920, MaxHeight: 1920},
+}
+
 // NewDreamiflyProvider creates a new Dreamifly client.
 func NewDreamiflyProvider() *DreamiflyProvider {
 	return &DreamiflyProvider{
@@ -33,6 +42,11 @@ func (p *DreamiflyProvider) GetName() string {
 // RequiresImageURL returns false as Dreamifly accepts image bytes directly.
 func (p *DreamiflyProvider) RequiresImageURL() bool {
 	return false
+}
+
+// GetModels returns the list of models and their capabilities for Dreamifly.
+func (p *DreamiflyProvider) GetModels() []ModelCapabilities {
+	return dreamiflyModels
 }
 
 // APIPayload matches the structure for the Dreamifly API.

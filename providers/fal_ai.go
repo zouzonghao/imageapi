@@ -18,6 +18,10 @@ type FalAIProvider struct {
 	Client *http.Client
 }
 
+var falAIModels = []ModelCapabilities{
+	{Name: "bytedance/seedream/v4/edit", SupportedParams: []string{"seed", "image"}, MaxWidth: 4096, MaxHeight: 4096},
+}
+
 // NewFalAIProvider creates a new Fal.ai client.
 func NewFalAIProvider(apiKey string) *FalAIProvider {
 	return &FalAIProvider{
@@ -36,6 +40,11 @@ func (p *FalAIProvider) RequiresImageURL() bool {
 	return true
 }
 
+// GetModels returns the list of models and their capabilities for Fal.ai.
+func (p *FalAIProvider) GetModels() []ModelCapabilities {
+	return falAIModels
+}
+
 type falAIAPIPayload struct {
 	Prompt    string   `json:"prompt"`
 	ImageURLs []string `json:"image_urls"`
@@ -43,7 +52,7 @@ type falAIAPIPayload struct {
 		Width  int `json:"width"`
 		Height int `json:"height"`
 	} `json:"image_size"`
-	SyncMode bool `json:"sync_mode"` // Important for getting the image directly
+	EnableSafetyChecker bool `json:"enable_safety_checker"`
 }
 
 type falAIAPIResponse struct {
@@ -63,9 +72,9 @@ func (p *FalAIProvider) Generate(input GenerationInput) (*GenerationOutput, erro
 	}
 
 	payload := falAIAPIPayload{
-		Prompt:    input.Prompt,
-		ImageURLs: []string{input.ImageURL},
-		SyncMode:  true, // We want the result directly
+		Prompt:              input.Prompt,
+		ImageURLs:           []string{input.ImageURL},
+		EnableSafetyChecker: false,
 	}
 	payload.ImageSize.Width = input.Width
 	payload.ImageSize.Height = input.Height
